@@ -54,8 +54,9 @@ def get_ticker_data(
             cached = load_cached_ticker_data(csv_path, ticker)
             if _covers_date_range(cached, start_date, end_date):
                 return cached, False, None
-        except Exception:
-            pass
+        except Exception as cache_error:
+            # Corrupt or schema-incompatible cache should not block fresh download.
+            _ = cache_error
 
     downloaded = download_ticker_data(ticker, start_date, end_date, download_fn=download_fn)
     if downloaded.empty:
