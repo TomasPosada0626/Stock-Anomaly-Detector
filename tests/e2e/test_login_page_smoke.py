@@ -27,4 +27,8 @@ def test_login_page_smoke() -> None:
         browser.close()
 
     assert "login" in content or "stock anomaly detector" in content
-    assert "register" in content or "stock anomaly detector" in content
+    assert (
+        "you can log in with username or email" in content
+        or "username or email" in content
+        or "choose action" in content
+    )
