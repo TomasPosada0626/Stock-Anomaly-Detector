@@ -1,8 +1,9 @@
-import numpy as np
 import pandas as pd
-from typing import Optional
 
-def rolling_quantile_anomaly(series: pd.Series, window: int = 20, quantile: float = 0.99) -> pd.Series:
+
+def rolling_quantile_anomaly(
+    series: pd.Series, window: int = 20, quantile: float = 0.99
+) -> pd.Series:
     """
     Detect anomalies using rolling quantile method.
     An anomaly is a value above the rolling quantile threshold.

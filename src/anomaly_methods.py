@@ -1,9 +1,10 @@
+from typing import Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import IsolationForest
 from pandas import Series
-from typing import Optional
+from sklearn.ensemble import IsolationForest
+
 
 def detect_anomalies_zscore(returns: Series, threshold: float = 3) -> Series:
     """
@@ -21,10 +22,9 @@ def detect_anomalies_zscore(returns: Series, threshold: float = 3) -> Series:
     # An anomaly is any value more than 'threshold' std deviations from the mean
     return np.abs(returns - mean) > threshold * std
 
+
 def detect_anomalies_iforest(
-    returns: Series,
-    contamination: float = 0.01,
-    random_state: Optional[int] = 42
+    returns: Series, contamination: float = 0.01, random_state: Optional[int] = 42
 ) -> Series:
     """
     Detect anomalies in a pandas Series using the Isolation Forest algorithm.

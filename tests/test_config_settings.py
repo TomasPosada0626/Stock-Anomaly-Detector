@@ -39,3 +39,20 @@ def test_production_import_with_required_env(monkeypatch, tmp_path: Path) -> Non
 
     assert settings.ENVIRONMENT == "production"
     assert settings.USERS_DB_PATH.endswith("users.db")
+
+
+def test_invalid_int_env_uses_default(monkeypatch) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv("SESSION_TTL_MINUTES", "not-int")
+
+    settings = importlib.import_module("config.settings")
+
+    assert settings.SESSION_TTL_MINUTES == 60
+
+
+def test_non_positive_setting_raises(monkeypatch) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv("SESSION_TTL_MINUTES", "0")
+
+    with pytest.raises(ValueError):
+        importlib.import_module("config.settings")
