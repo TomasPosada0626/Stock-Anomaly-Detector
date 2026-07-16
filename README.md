@@ -15,16 +15,20 @@ Professional anomaly detection app for historical stock prices using statistical
 
 ## Tech Stack
 
-- Python
+- Python 3.11+
 - Streamlit
 - Pandas, NumPy
-- Scikit-learn
+- Scikit-learn, DBSCAN, Isolation Forest
 - Prophet
-- Plotly, Matplotlib, Seaborn
-- Pytest
-- Ruff, Black, Bandit, pip-audit
-- bcrypt (password hashing)
-- SQLite
+- yfinance (market data ingestion)
+- Plotly, Matplotlib, Seaborn, Kaleido
+- SQLite (local persistence)
+- bcrypt (password hashing + legacy migration)
+- Pytest, pytest-cov
+- Ruff, Black
+- Bandit, pip-audit
+- Docker
+- GitHub Actions + Codecov
 
 ## Project Structure
 
@@ -147,6 +151,13 @@ This project demonstrates:
 - Product-minded UX in Streamlit
 - Testing discipline
 - Deployment readiness with Docker
+
+## Key Engineering Practices
+
+- Layered modular architecture (UI, services, algorithms)
+- Integration tests for authentication/session flows
+- Coverage-driven validation with CI gates
+- Security hardening with bcrypt and static/dependency scans
 
 ## Screenshots
 

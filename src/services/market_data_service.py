@@ -68,9 +68,16 @@ def get_ticker_data(
 
 def add_return_features(df: pd.DataFrame) -> pd.DataFrame:
     result = df.copy()
+
+    # Keep a single Close column if source data contains duplicated labels.
+    if isinstance(result.columns, pd.Index) and (result.columns == "Close").sum() > 1:
+        result = result.loc[:, ~result.columns.duplicated(keep="first")]
+
     close_col = result["Close"]
     if not isinstance(close_col, pd.Series):
         close_col = close_col.squeeze()
+        if isinstance(close_col, pd.DataFrame):
+            close_col = close_col.iloc[:, 0]
     result["Close"] = pd.to_numeric(close_col, errors="coerce")
     result["Return"] = result["Close"].pct_change()
     return result
