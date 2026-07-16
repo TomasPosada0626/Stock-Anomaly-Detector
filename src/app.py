@@ -11,123 +11,10 @@ from datetime import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn.cluster import DBSCAN
 from prophet import Prophet
-import sqlite3
-import hashlib
-import re
+from services.auth_service import AuthService
 
-# --- Database Setup ---
-def get_connection():
-    return sqlite3.connect('users.db', check_same_thread=False)
-
-def create_tables():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY,
-        email TEXT UNIQUE NOT NULL,
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        password TEXT NOT NULL,
-        created_at TEXT NOT NULL
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions (
-        session_id TEXT PRIMARY KEY,
-        username TEXT,
-        login_time TEXT
-    )''')
-    conn.commit()
-    conn.close()
-
-def migrate_users_table():
-    conn = get_connection()
-    c = conn.cursor()
-    # Check if 'email' column exists
-    c.execute("PRAGMA table_info(users)")
-    columns = [col[1] for col in c.fetchall()]
-    if 'email' not in columns:
-        # Rename old table, create new one, copy data
-        c.execute('ALTER TABLE users RENAME TO users_old')
-        c.execute('''CREATE TABLE users (
-            username TEXT PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            password TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        )''')
-        # Copy old data (set email to empty string)
-        c.execute('INSERT INTO users (username, email, first_name, last_name, password, created_at) SELECT username, "", "", "", password, created_at FROM users_old')
-        c.execute('DROP TABLE users_old')
-        conn.commit()
-    conn.close()
-
-# Run migration if needed
-if os.path.exists('users.db'):
-    migrate_users_table()
-
-create_tables()
-
-# --- Utility Functions ---
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def is_strong_password(password):
-    pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$'
-    return re.match(pattern, password)
-
-def is_username_available(username):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute('SELECT 1 FROM users WHERE username=?', (username,))
-    result = c.fetchone()
-    conn.close()
-    return result is None
-
-def is_email_available(email):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute('SELECT 1 FROM users WHERE lower(email)=lower(?)', (email.strip(),))
-    result = c.fetchone()
-    conn.close()
-    return result is None
-
-def register_user(username, email, first_name, last_name, password):
-    conn = get_connection()
-    c = conn.cursor()
-    try:
-        c.execute('INSERT INTO users (username, email, first_name, last_name, password, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-                  (username.strip(), email.strip(), first_name.strip(), last_name.strip(), hash_password(password), datetime.now().isoformat()))
-        conn.commit()
-        return True, None
-    except sqlite3.IntegrityError as e:
-        msg = str(e).lower()
-        if 'users.username' in msg:
-            return False, 'Username is not available.'
-        if 'users.email' in msg:
-            return False, 'Email is already registered. Try logging in.'
-        return False, 'Registration failed due to a data conflict. Please try again.'
-    finally:
-        conn.close()
-
-def authenticate_user(user_or_email, password):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute('SELECT password FROM users WHERE username=? OR email=?', (user_or_email, user_or_email))
-    row = c.fetchone()
-    conn.close()
-    if row and row[0] == hash_password(password):
-        return True
-    return False
-
-def create_session(username):
-    session_id = hashlib.sha256((username + str(datetime.now())).encode()).hexdigest()
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute('INSERT INTO sessions (session_id, username, login_time) VALUES (?, ?, ?)',
-              (session_id, username, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
-    return session_id
+auth_service = AuthService(db_path='users.db')
+auth_service.initialize()
 
 # --- Login/Register Panel ---
 def login_panel():
@@ -143,14 +30,14 @@ def login_panel():
             username = st.text_input('Username')
             username_status = st.empty()
             if username:
-                if not is_username_available(username):
+                if not auth_service.is_username_available(username):
                     username_status.error('Username is not available.')
                 else:
                     username_status.success('Username is available.')
             email = st.text_input('Email')
             email_status = st.empty()
             if email.strip():
-                if not is_email_available(email):
+                if not auth_service.is_email_available(email):
                     email_status.error('Email is already registered.')
                 else:
                     email_status.success('Email is available.')
@@ -162,14 +49,14 @@ def login_panel():
                     st.error('All fields are required.')
                 elif password != password2:
                     st.error('Passwords do not match.')
-                elif not is_strong_password(password):
+                elif not auth_service.is_strong_password(password):
                     st.error('Password must be at least 8 characters, include uppercase, lowercase, number, and special character.')
-                elif not is_username_available(username):
+                elif not auth_service.is_username_available(username):
                     st.error('Username is not available.')
-                elif not is_email_available(email):
+                elif not auth_service.is_email_available(email):
                     st.error('Email is already registered. Try logging in.')
                 else:
-                    registered, register_error = register_user(username, email, first_name, last_name, password)
+                    registered, register_error = auth_service.register_user(username, email, first_name, last_name, password)
                     if registered:
                         st.success('Registration successful! Please log in.')
                         st.session_state['logged_in'] = False
@@ -184,14 +71,9 @@ def login_panel():
             password = st.text_input('Password', type='password')
             if st.button('Login'):
                 # Only check credentials, not password strength
-                if authenticate_user(user_or_email, password):
-                    conn = get_connection()
-                    c = conn.cursor()
-                    c.execute('SELECT username FROM users WHERE username=? OR email=?', (user_or_email, user_or_email))
-                    user_row = c.fetchone()
-                    conn.close()
-                    username = user_row[0] if user_row else user_or_email
-                    session_id = create_session(username)
+                if auth_service.authenticate_user(user_or_email, password):
+                    username = auth_service.get_username_by_identifier(user_or_email) or user_or_email
+                    session_id = auth_service.create_session(username)
                     st.session_state['logged_in'] = True
                     st.session_state['username'] = username
                     st.session_state['session_id'] = session_id
@@ -214,7 +96,6 @@ if st.session_state.get('logged_in'):
         st.success('You have been logged out.')
         st.rerun()
 
-st.set_page_config(page_title="Stock Anomaly Detector", layout="wide")
 st.title("📈 Stock Anomaly Detector")
 st.write("Detect anomalies in historical stock prices using statistical methods.")
 

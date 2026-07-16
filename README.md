@@ -1,5 +1,8 @@
 # Stock Anomaly Detector
 
+[![CI](https://github.com/TomasPosada0626/Stock-Anomaly-Detector/actions/workflows/ci.yml/badge.svg)](https://github.com/TomasPosada0626/Stock-Anomaly-Detector/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/TomasPosada0626/Stock-Anomaly-Detector/graph/badge.svg)](https://codecov.io/gh/TomasPosada0626/Stock-Anomaly-Detector)
+
 Professional anomaly detection app for historical stock prices using statistical and machine learning methods.
 
 ## Why This Project Is Valuable
@@ -28,20 +31,28 @@ src/
   app.py
   anomaly_methods.py
   utils.py
+  services/
+    auth_service.py
 tests/
-  tests.py
+  test_anomaly_methods.py
+  test_auth_integration.py
 notebooks/
   stock_anomaly_analysis.ipynb
   deep_learning_anomaly_case_studies.ipynb
 data/
 Dockerfile
 requirements.txt
+requirements-notebooks.txt
+runtime.txt
 README.md
 FAQ.md
 DEPLOYMENT.md
 ARCHITECTURE.md
 CONTRIBUTING.md
+pytest.ini
 ```
+
+Runtime artifacts (`users.db`, logs, cache files) are excluded from version control.
 
 ## Quick Start (Windows PowerShell)
 
@@ -57,8 +68,18 @@ Open: http://localhost:8501
 ## Running Tests
 
 ```bash
-pytest tests/tests.py
+pytest
 ```
+
+Integration tests for auth/register/login are included in `tests/test_auth_integration.py`.
+
+Coverage report for core detection modules:
+
+```bash
+pytest --cov=src --cov-report=term-missing
+```
+
+Note: `src/app.py` is excluded from coverage because it is Streamlit UI entrypoint code; coverage targets all testable service and algorithm modules.
 
 ## Optional Notebook Dependencies
 

@@ -1,0 +1,8 @@
+[run]
+source = src
+omit =
+    src/app.py
+
+[report]
+show_missing = True
+skip_covered = False

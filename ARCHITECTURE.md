@@ -7,6 +7,7 @@ This project is a single Streamlit application that combines UI and business log
 - Frontend/UI layer: Streamlit components in `src/app.py`
 - Data access layer: Yahoo Finance download + local CSV cache
 - Detection layer: statistical and ML methods
+- Service layer: authentication and session logic in `src/services/auth_service.py`
 - Persistence layer: local SQLite file (`users.db`) for user/session data
 
 ## Runtime Flow
@@ -20,16 +21,18 @@ This project is a single Streamlit application that combines UI and business log
 
 ## Main Modules
 
-- `src/app.py`: Streamlit app, authentication, controls, plotting, orchestration.
+- `src/app.py`: Streamlit app, controls, visualization orchestration.
+- `src/services/auth_service.py`: registration/login/session logic and SQLite persistence.
 - `src/anomaly_methods.py`: reusable anomaly detection logic.
 - `src/utils.py`: utility helpers for processing.
-- `tests/tests.py`: automated validation for core detection behavior.
+- `tests/test_anomaly_methods.py`: automated validation for anomaly algorithms.
+- `tests/test_auth_integration.py`: integration tests for registration and login flows.
 
 ## Data Layout
 
 - `data/`: local historical CSV files.
 - `src/data/`: additional packaged sample data.
-- `users.db`: local SQLite database generated at runtime.
+- `users.db`: local SQLite database generated at runtime (excluded from git).
 
 ## Deployment Topology
 

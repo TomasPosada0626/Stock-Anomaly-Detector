@@ -1,4 +1,0 @@
-2026-02-03 11:33:54,508 [INFO] App started. User accessed Stock Anomaly Detector.
-2026-02-03 11:34:00,789 [INFO] App started. User accessed Stock Anomaly Detector.
-2026-02-03 11:34:00,801 [INFO] User requested data load for tickers: ['AAPL']
-2026-02-03 11:34:00,830 [INFO] Data loaded for AAPL: 2514 rows.
