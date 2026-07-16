@@ -36,7 +36,12 @@ def render_login_panel(auth_service: AuthService) -> None:
             "<div style='text-align:center;'><h1>Login / Register</h1></div>",
             unsafe_allow_html=True,
         )
-        option = st.radio("Choose action:", ["Login", "Register"], horizontal=True)
+        if "auth_action" not in st.session_state:
+            st.session_state["auth_action"] = "Login"
+
+        option = st.radio(
+            "Choose action:", ["Login", "Register"], horizontal=True, key="auth_action"
+        )
         if option == "Register":
             st.subheader("Register")
             st.caption("Tip: Email is case-insensitive. Username is case-sensitive.")
@@ -80,18 +85,27 @@ def render_login_panel(auth_service: AuthService) -> None:
                         username, email, first_name, last_name, password
                     )
                     if registered:
-                        st.success("Registration successful! Please log in.")
+                        st.session_state["post_register_notice"] = (
+                            "Registration successful! Please log in."
+                        )
+                        st.session_state["post_register_identifier"] = email.strip().lower()
+                        st.session_state["auth_action"] = "Login"
                         st.session_state["logged_in"] = False
-                        st.session_state["username"] = username
-                        st.session_state["login_mode"] = True
+                        st.session_state["username"] = ""
                         st.rerun()
                     else:
                         st.error(register_error or "Registration failed. Please try again.")
         else:
+            post_register_notice = st.session_state.pop("post_register_notice", "")
+            if post_register_notice:
+                st.success(post_register_notice)
+
             st.subheader("Login")
             st.caption("You can log in with username or email.")
             remembered_identifier = _get_remembered_identifier()
-            user_or_email = st.text_input("Username or Email", value=remembered_identifier)
+            post_register_identifier = st.session_state.pop("post_register_identifier", "")
+            default_identifier = post_register_identifier or remembered_identifier
+            user_or_email = st.text_input("Username or Email", value=default_identifier)
             password = st.text_input("Password", type="password")
             remember_identifier = st.checkbox(
                 "Remember username/email on this device",
