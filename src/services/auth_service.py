@@ -9,11 +9,13 @@ from typing import Optional, Tuple
 import bcrypt
 
 from config import LOCKOUT_MINUTES, MAX_FAILED_LOGIN_ATTEMPTS, SESSION_TTL_MINUTES
+from services.observability import get_logger
 
 
 class AuthService:
     def __init__(self, db_path: str = "users.db") -> None:
         self.db_path = db_path
+        self.logger = get_logger("auth_service")
 
     def get_connection(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path, check_same_thread=False, timeout=5)
@@ -90,6 +92,7 @@ class AuthService:
             self.migrate_users_table()
             self.migrate_sessions_table()
         self.create_tables()
+        self.cleanup_expired_sessions()
 
     @staticmethod
     def _utcnow() -> datetime:
@@ -155,6 +158,7 @@ class AuthService:
         )
         conn.commit()
         conn.close()
+        self.logger.warning("failed_login identifier=%s count=%s", normalized, failed_count)
 
     def _clear_failed_attempts(self, identifier: str) -> None:
         conn = self.get_connection()
@@ -224,16 +228,20 @@ class AuthService:
             )
             conn.commit()
             self._record_audit("register", username, True, "user registered")
+            self.logger.info("register_success username=%s", username)
             return True, None
         except sqlite3.IntegrityError as exc:
             msg = str(exc).lower()
             if "users.username" in msg:
                 self._record_audit("register", username, False, "username unavailable")
+                self.logger.info("register_failed_username username=%s", username)
                 return False, "Username is not available."
             if "users.email" in msg:
                 self._record_audit("register", email, False, "email already exists")
+                self.logger.info("register_failed_email email=%s", email)
                 return False, "Email is already registered. Try logging in."
             self._record_audit("register", username, False, "data conflict")
+            self.logger.exception("register_failed_data_conflict identifier=%s", username)
             return False, "Registration failed due to a data conflict. Please try again."
         finally:
             conn.close()
@@ -242,6 +250,7 @@ class AuthService:
         if self.is_locked_out(user_or_email):
             remaining = self._get_lockout_remaining_minutes(user_or_email)
             self._record_audit("login", user_or_email, False, "account locked")
+            self.logger.warning("login_locked identifier=%s remaining=%s", user_or_email, remaining)
             return False, f"Too many failed attempts. Try again in {remaining} minute(s)."
 
         conn = self.get_connection()
@@ -254,6 +263,7 @@ class AuthService:
             conn.close()
             self._register_failed_attempt(user_or_email)
             self._record_audit("login", user_or_email, False, "unknown identifier")
+            self.logger.warning("login_unknown_identifier identifier=%s", user_or_email)
             return False, "Invalid username/email or password."
 
         stored_hash = row[0]
@@ -272,12 +282,15 @@ class AuthService:
             self._register_failed_attempt(user_or_email)
             if self.is_locked_out(user_or_email):
                 self._record_audit("login", user_or_email, False, "lockout threshold reached")
+                self.logger.warning("login_lockout_threshold identifier=%s", user_or_email)
                 return False, f"Too many failed attempts. Try again in {LOCKOUT_MINUTES} minute(s)."
             self._record_audit("login", user_or_email, False, "invalid password")
+            self.logger.warning("login_invalid_password identifier=%s", user_or_email)
             return False, "Invalid username/email or password."
 
         self._clear_failed_attempts(user_or_email)
         self._record_audit("login", user_or_email, True, "login successful")
+        self.logger.info("login_success identifier=%s", user_or_email)
         return True, ""
 
     def authenticate_user(self, user_or_email: str, password: str) -> bool:
@@ -294,12 +307,19 @@ class AuthService:
         conn.close()
         return row[0] if row else None
 
-    def create_session(self, username: str, ttl_minutes: int = SESSION_TTL_MINUTES) -> str:
+    def create_session(
+        self,
+        username: str,
+        ttl_minutes: int = SESSION_TTL_MINUTES,
+        invalidate_existing: bool = True,
+    ) -> str:
         session_id = secrets.token_hex(32)
         now = self._utcnow()
         expires_at = (now + timedelta(minutes=ttl_minutes)).isoformat()
         conn = self.get_connection()
         cursor = conn.cursor()
+        if invalidate_existing:
+            cursor.execute("DELETE FROM sessions WHERE username=?", (username,))
         cursor.execute(
             "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
             (session_id, username, now.isoformat(), expires_at),
@@ -307,6 +327,7 @@ class AuthService:
         conn.commit()
         conn.close()
         self._record_audit("session_create", username, True, "session created")
+        self.logger.info("session_create username=%s", username)
         return session_id
 
     def is_session_valid(self, session_id: str) -> bool:
@@ -330,3 +351,17 @@ class AuthService:
         conn.commit()
         conn.close()
         self._record_audit("session_invalidate", session_id, True, "session invalidated")
+
+    def cleanup_expired_sessions(self) -> int:
+        now = self._utcnow().isoformat()
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= ?", (now,)
+        )
+        deleted = cursor.rowcount if cursor.rowcount is not None else 0
+        conn.commit()
+        conn.close()
+        if deleted:
+            self.logger.info("session_cleanup deleted=%s", deleted)
+        return deleted

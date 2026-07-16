@@ -1,5 +1,7 @@
 name: CI
 
+# CD health checks run in .github/workflows/cd.yml after successful CI on main.
+
 on:
   push:
     branches: ["main"]

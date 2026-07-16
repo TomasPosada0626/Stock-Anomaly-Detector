@@ -24,3 +24,8 @@ htmlcov/
 # Lint/security artifacts
 .ruff_cache/
 bandit-report.json
+
+# Environment files
+.env
+.env.*
+!.env.example

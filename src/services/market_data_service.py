@@ -4,7 +4,10 @@ from typing import Callable, Optional, Tuple
 import pandas as pd
 import yfinance as yf
 
+from services.observability import get_logger
+
 DownloadFn = Callable[..., pd.DataFrame]
+logger = get_logger("market_data_service")
 
 
 def ensure_data_dir(data_dir: str) -> None:
@@ -53,16 +56,19 @@ def get_ticker_data(
         try:
             cached = load_cached_ticker_data(csv_path, ticker)
             if _covers_date_range(cached, start_date, end_date):
+                logger.info("cache_hit ticker=%s path=%s", ticker, csv_path)
                 return cached, False, None
         except Exception as cache_error:
             # Corrupt or schema-incompatible cache should not block fresh download.
-            _ = cache_error
+            logger.warning("cache_read_failed ticker=%s error=%s", ticker, str(cache_error))
 
     downloaded = download_ticker_data(ticker, start_date, end_date, download_fn=download_fn)
     if downloaded.empty:
+        logger.info("download_empty ticker=%s", ticker)
         return downloaded, True, f"No data found for {ticker} in selected date range."
 
     downloaded.to_csv(csv_path)
+    logger.info("download_saved ticker=%s path=%s", ticker, csv_path)
     return downloaded, True, None
 
 

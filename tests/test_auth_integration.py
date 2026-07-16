@@ -237,3 +237,41 @@ def test_audit_log_records_events(tmp_path) -> None:
 
     assert any(r[0] == "register" and r[1] == 1 for r in rows)
     assert any(r[0] == "login" and r[1] == 1 for r in rows)
+
+
+def test_create_session_invalidates_previous_by_default(tmp_path) -> None:
+    db_path = tmp_path / "single-session.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+    auth.register_user("solo", "solo@email.com", "S", "O", "Strong*Pass1")
+
+    old_session = auth.create_session("solo")
+    new_session = auth.create_session("solo")
+
+    assert old_session != new_session
+    assert auth.is_session_valid(old_session) is False
+    assert auth.is_session_valid(new_session) is True
+
+
+def test_cleanup_expired_sessions_removes_old_rows(tmp_path) -> None:
+    db_path = tmp_path / "cleanup.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
+        (
+            "old-session",
+            "user",
+            datetime.now(UTC).isoformat(),
+            (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    deleted = auth.cleanup_expired_sessions()
+
+    assert deleted >= 1
+    assert auth.is_session_valid("old-session") is False

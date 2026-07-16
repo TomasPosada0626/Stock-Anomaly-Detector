@@ -10,6 +10,8 @@ This project is a single Streamlit application that combines UI and business log
 - Detection layer: statistical and ML methods
 - Service layer: authentication and session logic in `src/services/auth_service.py`
 - Persistence layer: local SQLite file (`users.db`) for user/session data
+- Observability layer: structured logging helpers in `src/services/observability.py`
+- Config layer: environment-driven settings in `src/config.py`
 
 ## Runtime Flow
 
@@ -25,6 +27,7 @@ This project is a single Streamlit application that combines UI and business log
 - `src/app.py`: Streamlit app, controls, visualization orchestration.
 - `src/services/auth_service.py`: registration/login/session logic and SQLite persistence.
 - `src/services/market_data_service.py`: cached market data loading/downloading and return feature engineering.
+- `src/services/observability.py`: logging utilities for operational tracing.
 - `src/ui/auth_ui.py`: login/register panel rendering.
 - `src/ui/charts.py`: reusable Plotly chart builders.
 - `src/anomaly_methods.py`: reusable anomaly detection logic.
@@ -44,6 +47,9 @@ This project is a single Streamlit application that combines UI and business log
 
 - Passwords are stored with bcrypt.
 - Legacy SHA-256 hashes are auto-upgraded to bcrypt on successful login.
+- Failed login attempts are rate-limited with temporary lockout.
+- Sessions are time-limited and expired sessions are cleaned up.
+- Session creation invalidates previous active sessions for the same user.
 - CI includes static analysis (`bandit`) and dependency vulnerability checks (`pip-audit`).
 
 ## Deployment Topology

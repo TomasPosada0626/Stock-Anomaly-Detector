@@ -10,11 +10,14 @@ from prophet import Prophet
 from config import SESSION_TTL_MINUTES
 from services.auth_service import AuthService
 from services.market_data_service import add_return_features, get_ticker_data
+from services.observability import get_logger
 from ui.auth_ui import render_login_panel
 from ui.charts import build_anomaly_chart, build_price_chart
 
+logger = get_logger("app")
 auth_service = AuthService(db_path="users.db")
 auth_service.initialize()
+logger.info("app_initialized")
 
 if st.session_state.get("logged_in"):
     current_session_id = st.session_state.get("session_id", "")
@@ -127,6 +130,7 @@ if st.sidebar.button("Load Data"):
             if warning_message:
                 st.warning(warning_message)
         except Exception as e:
+            logger.exception("data_load_failed ticker=%s", ticker)
             st.error(f"Failed to load data for {ticker}: {e}")
             df = pd.DataFrame()
         if not df.empty:

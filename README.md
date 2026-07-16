@@ -32,6 +32,10 @@ Live demo: [https://stock-anomaly-detector-tomas.streamlit.app/](https://stock-a
 - Docker
 - GitHub Actions + Codecov
 
+## Live Demo
+
+- Streamlit App: [https://stock-anomaly-detector-tomas.streamlit.app/](https://stock-anomaly-detector-tomas.streamlit.app/)
+
 ## Project Structure
 
 ```text
@@ -65,6 +69,8 @@ ARCHITECTURE.md
 CONTRIBUTING.md
 pytest.ini
 pyproject.toml
+.env.example
+RUNBOOK.md
 ```
 
 Runtime artifacts (`users.db`, logs, cache files) are excluded from version control.
@@ -76,6 +82,12 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 streamlit run src/app.py
+```
+
+Optional: copy environment template and customize values:
+
+```powershell
+Copy-Item .env.example .env
 ```
 
 Open: http://localhost:8501
@@ -103,6 +115,8 @@ GitHub Actions runs these jobs on every push/PR to `main`:
 - `test`: unit/integration tests + coverage upload
 - `quality`: `ruff check` + `black --check`
 - `security`: `bandit` static analysis + `pip-audit` dependency scan
+
+Deployment validation runs automatically in a separate `CD` workflow after successful CI on `main`.
 
 ## Optional Notebook Dependencies
 
@@ -132,19 +146,21 @@ pip install -r requirements-notebooks.txt
 - Contribution workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Version history: [CHANGELOG.md](CHANGELOG.md)
 - Contributors: [CONTRIBUTORS.md](CONTRIBUTORS.md)
+- Operations runbook: [RUNBOOK.md](RUNBOOK.md)
 
 ## Deployment Summary
 
 Implemented in this repository:
 - Local run with Python
 - Docker deployment via `Dockerfile`
+- Automated CI/CD validation workflows in GitHub Actions
 
 Documented (manual setup required):
 - Streamlit Community Cloud
 - Any Docker-compatible cloud platform
 
 Not yet implemented:
-- Automated deployment job (CD)
+- Infra-as-code templates for cloud provisioning
 
 ## Notes for Recruiters
 
