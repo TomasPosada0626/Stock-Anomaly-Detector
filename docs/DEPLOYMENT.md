@@ -83,8 +83,10 @@ After deployment:
 Implemented:
 - Dockerfile for containerized deployment.
 - Local run instructions.
+- CI workflow for tests, quality, security, and coverage.
+- CD workflow for deployment smoke checks after CI success on `main`.
 
 Not yet implemented:
-- CI/CD pipeline for automatic deploys.
+- Automatic provider-side deploy trigger from GitHub Actions.
 - IaC templates (Terraform/Bicep/CloudFormation).
 - Provider-specific manifest files.

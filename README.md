@@ -58,19 +58,24 @@ notebooks/
   stock_anomaly_analysis.ipynb
   deep_learning_anomaly_case_studies.ipynb
 data/
+scripts/
+  download_all_tickers.py
+docs/
+  FAQ.md
+  DEPLOYMENT.md
+  ARCHITECTURE.md
+  CONTRIBUTING.md
+  CONTRIBUTORS.md
+  CHANGELOG.md
+  RUNBOOK.md
 Dockerfile
 requirements.txt
 requirements-notebooks.txt
 runtime.txt
 README.md
-FAQ.md
-DEPLOYMENT.md
-ARCHITECTURE.md
-CONTRIBUTING.md
 pytest.ini
 pyproject.toml
 .env.example
-RUNBOOK.md
 storage/
 ```
 
@@ -141,13 +146,13 @@ pip install -r requirements-notebooks.txt
 
 ## Available Documentation
 
-- Setup and usage: [FAQ.md](FAQ.md)
-- Deployment options: [DEPLOYMENT.md](DEPLOYMENT.md)
-- System design: [ARCHITECTURE.md](ARCHITECTURE.md)
-- Contribution workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Version history: [CHANGELOG.md](CHANGELOG.md)
-- Contributors: [CONTRIBUTORS.md](CONTRIBUTORS.md)
-- Operations runbook: [RUNBOOK.md](RUNBOOK.md)
+- Setup and usage: [docs/FAQ.md](docs/FAQ.md)
+- Deployment options: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- System design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Contribution workflow: [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
+- Version history: [docs/CHANGELOG.md](docs/CHANGELOG.md)
+- Contributors: [docs/CONTRIBUTORS.md](docs/CONTRIBUTORS.md)
+- Operations runbook: [docs/RUNBOOK.md](docs/RUNBOOK.md)
 
 ## Deployment Summary
 

@@ -30,7 +30,7 @@ Use short, descriptive names:
 Run:
 
 ```bash
-pytest tests/tests.py
+pytest
 ```
 
 If you add a new anomaly method, include at least:
@@ -42,9 +42,9 @@ If you add a new anomaly method, include at least:
 
 Update relevant docs when behavior changes:
 - `README.md`
-- `FAQ.md`
-- `DEPLOYMENT.md`
-- `CHANGELOG.md`
+- `docs/FAQ.md`
+- `docs/DEPLOYMENT.md`
+- `docs/CHANGELOG.md`
 
 ## Pull Request Checklist
 

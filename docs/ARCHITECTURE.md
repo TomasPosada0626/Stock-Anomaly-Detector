@@ -9,7 +9,7 @@ This project is a single Streamlit application that combines UI and business log
 - Data access layer: Yahoo Finance download + local CSV cache in `src/services/market_data_service.py`
 - Detection layer: statistical and ML methods
 - Service layer: authentication and session logic in `src/services/auth_service.py`
-- Persistence layer: local SQLite file (`users.db`) for user/session data
+- Persistence layer: local SQLite file (`storage/users.db`) for user/session data
 - Observability layer: structured logging helpers in `src/services/observability.py`
 - Config layer: environment-driven settings in `src/config.py`
 
@@ -40,8 +40,8 @@ This project is a single Streamlit application that combines UI and business log
 ## Data Layout
 
 - `data/`: local historical CSV files.
-- `src/data/`: additional packaged sample data.
-- `users.db`: local SQLite database generated at runtime (excluded from git).
+- `storage/users.db`: local SQLite database generated at runtime (excluded from git).
+- `storage/logs/`: runtime application logs (excluded from git).
 
 ## Security Model
 

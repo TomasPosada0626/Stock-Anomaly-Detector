@@ -8,12 +8,17 @@ from typing import Optional, Tuple
 
 import bcrypt
 
-from config import LOCKOUT_MINUTES, MAX_FAILED_LOGIN_ATTEMPTS, SESSION_TTL_MINUTES
+from config import (
+    LOCKOUT_MINUTES,
+    MAX_FAILED_LOGIN_ATTEMPTS,
+    SESSION_TTL_MINUTES,
+    USERS_DB_PATH,
+)
 from services.observability import get_logger
 
 
 class AuthService:
-    def __init__(self, db_path: str = "users.db") -> None:
+    def __init__(self, db_path: str = USERS_DB_PATH) -> None:
         self.db_path = db_path
         db_dir = os.path.dirname(self.db_path)
         if db_dir:
