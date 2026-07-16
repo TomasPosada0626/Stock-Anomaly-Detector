@@ -240,6 +240,18 @@ class AuthService:
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
+            cursor.execute("SELECT 1 FROM users WHERE username=?", (username_clean,))
+            if cursor.fetchone():
+                self._record_audit("register", username_clean, False, "username unavailable")
+                self.logger.info("register_failed_username username=%s", username_clean)
+                return False, "Username is not available."
+
+            cursor.execute("SELECT 1 FROM users WHERE lower(email)=lower(?)", (email_clean,))
+            if cursor.fetchone():
+                self._record_audit("register", email_clean, False, "email already exists")
+                self.logger.info("register_failed_email email=%s", email_clean)
+                return False, "Email is already registered. Try logging in."
+
             cursor.execute(
                 "INSERT INTO users (username, email, first_name, last_name, password, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (
@@ -260,19 +272,32 @@ class AuthService:
         except sqlite3.IntegrityError as exc:
             if hasattr(conn, "rollback"):
                 conn.rollback()
+            # Re-check both keys to return an accurate conflict message.
+            username_taken = False
+            email_taken = False
+            try:
+                cursor.execute("SELECT 1 FROM users WHERE username=?", (username_clean,))
+                username_taken = cursor.fetchone() is not None
+                cursor.execute("SELECT 1 FROM users WHERE lower(email)=lower(?)", (email_clean,))
+                email_taken = cursor.fetchone() is not None
+            except sqlite3.Error:
+                username_taken = False
+                email_taken = False
+
             conn.close()
             conn = None
-            msg = str(exc).lower()
-            if "users.username" in msg:
+            if username_taken:
                 self._record_audit("register", username_clean, False, "username unavailable")
                 self.logger.info("register_failed_username username=%s", username_clean)
                 return False, "Username is not available."
-            if "users.email" in msg:
+            if email_taken:
                 self._record_audit("register", email_clean, False, "email already exists")
                 self.logger.info("register_failed_email email=%s", email_clean)
                 return False, "Email is already registered. Try logging in."
             self._record_audit("register", username_clean, False, "data conflict")
-            self.logger.exception("register_failed_data_conflict identifier=%s", username_clean)
+            self.logger.exception(
+                "register_failed_data_conflict identifier=%s error=%s", username_clean, str(exc)
+            )
             return False, "Registration failed due to a data conflict. Please try again."
         finally:
             if conn is not None:
