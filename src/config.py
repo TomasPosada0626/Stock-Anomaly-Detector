@@ -1,0 +1,5 @@
+# Central application settings.
+
+SESSION_TTL_MINUTES = 60
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15

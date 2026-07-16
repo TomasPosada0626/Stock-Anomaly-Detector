@@ -5,6 +5,8 @@
 
 Professional anomaly detection app for historical stock prices using statistical and machine learning methods.
 
+Live demo: [https://stock-anomaly-detector-tomas.streamlit.app/](https://stock-anomaly-detector-tomas.streamlit.app/)
+
 ## Why This Project Is Valuable
 
 - Real product interface with authentication and sessions.
@@ -151,6 +153,7 @@ This project demonstrates:
 - Product-minded UX in Streamlit
 - Testing discipline
 - Deployment readiness with Docker
+- Security hardening (bcrypt, lockout policy, session expiration, audit trail)
 
 ## Key Engineering Practices
 

@@ -3,10 +3,12 @@ import os
 import re
 import secrets
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Optional, Tuple
 
 import bcrypt
+
+from config import LOCKOUT_MINUTES, MAX_FAILED_LOGIN_ATTEMPTS, SESSION_TTL_MINUTES
 
 
 class AuthService:
@@ -14,7 +16,7 @@ class AuthService:
         self.db_path = db_path
 
     def get_connection(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path, check_same_thread=False)
+        return sqlite3.connect(self.db_path, check_same_thread=False, timeout=5)
 
     def create_tables(self) -> None:
         conn = self.get_connection()
@@ -30,9 +32,34 @@ class AuthService:
         cursor.execute("""CREATE TABLE IF NOT EXISTS sessions (
                 session_id TEXT PRIMARY KEY,
                 username TEXT,
-                login_time TEXT
+                login_time TEXT,
+                expires_at TEXT
+            )""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS failed_logins (
+                identifier TEXT PRIMARY KEY,
+                failed_count INTEGER NOT NULL,
+                last_failed_at TEXT NOT NULL,
+                locked_until TEXT
+            )""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS auth_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                identifier TEXT,
+                success INTEGER NOT NULL,
+                message TEXT,
+                created_at TEXT NOT NULL
             )""")
         conn.commit()
+        conn.close()
+
+    def migrate_sessions_table(self) -> None:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(sessions)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if columns and "expires_at" not in columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN expires_at TEXT")
+            conn.commit()
         conn.close()
 
     def migrate_users_table(self) -> None:
@@ -61,7 +88,82 @@ class AuthService:
     def initialize(self) -> None:
         if os.path.exists(self.db_path):
             self.migrate_users_table()
+            self.migrate_sessions_table()
         self.create_tables()
+
+    @staticmethod
+    def _utcnow() -> datetime:
+        return datetime.now(UTC)
+
+    def _record_audit(
+        self, event_type: str, identifier: str, success: bool, message: Optional[str] = None
+    ) -> None:
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO auth_audit (event_type, identifier, success, message, created_at) VALUES (?, ?, ?, ?, ?)",
+                (event_type, identifier, int(success), message or "", self._utcnow().isoformat()),
+            )
+            conn.commit()
+        except sqlite3.Error:
+            # Audit logging should never block auth flows.
+            return
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def _get_lockout_remaining_minutes(self, identifier: str) -> int:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT locked_until FROM failed_logins WHERE identifier=?",
+            (identifier.strip().lower(),),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if not row or not row[0]:
+            return 0
+        try:
+            locked_until = datetime.fromisoformat(row[0])
+        except ValueError:
+            return 0
+        delta = locked_until - self._utcnow()
+        return max(0, int(delta.total_seconds() // 60) + (1 if delta.total_seconds() > 0 else 0))
+
+    def is_locked_out(self, identifier: str) -> bool:
+        return self._get_lockout_remaining_minutes(identifier) > 0
+
+    def _register_failed_attempt(self, identifier: str) -> None:
+        normalized = identifier.strip().lower()
+        now = self._utcnow()
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT failed_count FROM failed_logins WHERE identifier=?",
+            (normalized,),
+        )
+        row = cursor.fetchone()
+        failed_count = (row[0] if row else 0) + 1
+        locked_until = None
+        if failed_count >= MAX_FAILED_LOGIN_ATTEMPTS:
+            locked_until = (now + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
+        cursor.execute(
+            "INSERT OR REPLACE INTO failed_logins (identifier, failed_count, last_failed_at, locked_until) VALUES (?, ?, ?, ?)",
+            (normalized, failed_count, now.isoformat(), locked_until),
+        )
+        conn.commit()
+        conn.close()
+
+    def _clear_failed_attempts(self, identifier: str) -> None:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM failed_logins WHERE identifier=?", (identifier.strip().lower(),)
+        )
+        conn.commit()
+        conn.close()
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -121,18 +223,27 @@ class AuthService:
                 ),
             )
             conn.commit()
+            self._record_audit("register", username, True, "user registered")
             return True, None
         except sqlite3.IntegrityError as exc:
             msg = str(exc).lower()
             if "users.username" in msg:
+                self._record_audit("register", username, False, "username unavailable")
                 return False, "Username is not available."
             if "users.email" in msg:
+                self._record_audit("register", email, False, "email already exists")
                 return False, "Email is already registered. Try logging in."
+            self._record_audit("register", username, False, "data conflict")
             return False, "Registration failed due to a data conflict. Please try again."
         finally:
             conn.close()
 
-    def authenticate_user(self, user_or_email: str, password: str) -> bool:
+    def authenticate_user_with_reason(self, user_or_email: str, password: str) -> Tuple[bool, str]:
+        if self.is_locked_out(user_or_email):
+            remaining = self._get_lockout_remaining_minutes(user_or_email)
+            self._record_audit("login", user_or_email, False, "account locked")
+            return False, f"Too many failed attempts. Try again in {remaining} minute(s)."
+
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
@@ -141,13 +252,14 @@ class AuthService:
         row = cursor.fetchone()
         if not row:
             conn.close()
-            return False
+            self._register_failed_attempt(user_or_email)
+            self._record_audit("login", user_or_email, False, "unknown identifier")
+            return False, "Invalid username/email or password."
 
         stored_hash = row[0]
         password_ok = self.verify_password(password, stored_hash)
 
         if password_ok and not stored_hash.startswith("$2"):
-            # Upgrade legacy SHA-256 hash to bcrypt after successful login.
             cursor.execute(
                 "UPDATE users SET password=? WHERE username=? OR email=?",
                 (self.hash_password(password), user_or_email, user_or_email),
@@ -155,7 +267,22 @@ class AuthService:
             conn.commit()
 
         conn.close()
-        return password_ok
+
+        if not password_ok:
+            self._register_failed_attempt(user_or_email)
+            if self.is_locked_out(user_or_email):
+                self._record_audit("login", user_or_email, False, "lockout threshold reached")
+                return False, f"Too many failed attempts. Try again in {LOCKOUT_MINUTES} minute(s)."
+            self._record_audit("login", user_or_email, False, "invalid password")
+            return False, "Invalid username/email or password."
+
+        self._clear_failed_attempts(user_or_email)
+        self._record_audit("login", user_or_email, True, "login successful")
+        return True, ""
+
+    def authenticate_user(self, user_or_email: str, password: str) -> bool:
+        ok, _ = self.authenticate_user_with_reason(user_or_email, password)
+        return ok
 
     def get_username_by_identifier(self, user_or_email: str) -> Optional[str]:
         conn = self.get_connection()
@@ -167,14 +294,39 @@ class AuthService:
         conn.close()
         return row[0] if row else None
 
-    def create_session(self, username: str) -> str:
+    def create_session(self, username: str, ttl_minutes: int = SESSION_TTL_MINUTES) -> str:
         session_id = secrets.token_hex(32)
+        now = self._utcnow()
+        expires_at = (now + timedelta(minutes=ttl_minutes)).isoformat()
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO sessions (session_id, username, login_time) VALUES (?, ?, ?)",
-            (session_id, username, datetime.now().isoformat()),
+            "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
+            (session_id, username, now.isoformat(), expires_at),
         )
         conn.commit()
         conn.close()
+        self._record_audit("session_create", username, True, "session created")
         return session_id
+
+    def is_session_valid(self, session_id: str) -> bool:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT expires_at FROM sessions WHERE session_id=?", (session_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if not row or not row[0]:
+            return False
+        try:
+            expires_at = datetime.fromisoformat(row[0])
+        except ValueError:
+            return False
+        return expires_at > self._utcnow()
+
+    def invalidate_session(self, session_id: str) -> None:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
+        conn.commit()
+        conn.close()
+        self._record_audit("session_invalidate", session_id, True, "session invalidated")

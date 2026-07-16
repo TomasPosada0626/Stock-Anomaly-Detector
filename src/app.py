@@ -1,4 +1,5 @@
 import streamlit as st
+
 st.set_page_config(page_title="Stock Anomaly Detector", layout="wide")
 import pandas as pd
 import numpy as np
@@ -6,26 +7,41 @@ from datetime import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn.cluster import DBSCAN
 from prophet import Prophet
+from config import SESSION_TTL_MINUTES
 from services.auth_service import AuthService
 from services.market_data_service import add_return_features, get_ticker_data
 from ui.auth_ui import render_login_panel
 from ui.charts import build_anomaly_chart, build_price_chart
 
-auth_service = AuthService(db_path='users.db')
+auth_service = AuthService(db_path="users.db")
 auth_service.initialize()
 
-if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+if st.session_state.get("logged_in"):
+    current_session_id = st.session_state.get("session_id", "")
+    if not current_session_id or not auth_service.is_session_valid(current_session_id):
+        st.session_state["logged_in"] = False
+        st.session_state["username"] = ""
+        st.session_state["session_id"] = ""
+        st.warning(
+            f"Your session has expired after {SESSION_TTL_MINUTES} minutes. Please log in again."
+        )
+        st.rerun()
+
+if "logged_in" not in st.session_state or not st.session_state["logged_in"]:
     render_login_panel(auth_service)
     st.stop()
 
 # --- Main App Content ---
-if st.session_state.get('logged_in'):
+if st.session_state.get("logged_in"):
     st.write(f"Welcome, {st.session_state.get('username', '')}!")
-    if st.button('Logout'):
-        st.session_state['logged_in'] = False
-        st.session_state['username'] = ''
-        st.session_state['session_id'] = ''
-        st.success('You have been logged out.')
+    if st.button("Logout"):
+        current_session_id = st.session_state.get("session_id", "")
+        if current_session_id:
+            auth_service.invalidate_session(current_session_id)
+        st.session_state["logged_in"] = False
+        st.session_state["username"] = ""
+        st.session_state["session_id"] = ""
+        st.success("You have been logged out.")
         st.rerun()
 
 st.title("📈 Stock Anomaly Detector")
@@ -36,7 +52,11 @@ st.write("Detect anomalies in historical stock prices using statistical methods.
 st.sidebar.header("App Settings")
 
 # --- CSV Upload ---
-uploaded_file = st.sidebar.file_uploader("Upload your own CSV data", type=["csv"], help="Upload a CSV file with stock data (Date, Close, etc.)")
+uploaded_file = st.sidebar.file_uploader(
+    "Upload your own CSV data",
+    type=["csv"],
+    help="Upload a CSV file with stock data (Date, Close, etc.)",
+)
 user_data = None
 if uploaded_file is not None:
     try:
@@ -50,8 +70,17 @@ st.sidebar.markdown("---")
 
 st.sidebar.header("Select Stocks and Date Range")
 popular_tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "JPM", "V", "DIS"]
-tickers = st.sidebar.multiselect("Stock Tickers", options=popular_tickers, default=["AAPL"], help="Choose one or more stock tickers to analyze.")
-custom_ticker = st.sidebar.text_input("Or enter custom tickers (comma separated)", value="", help="Add custom tickers separated by commas.")
+tickers = st.sidebar.multiselect(
+    "Stock Tickers",
+    options=popular_tickers,
+    default=["AAPL"],
+    help="Choose one or more stock tickers to analyze.",
+)
+custom_ticker = st.sidebar.text_input(
+    "Or enter custom tickers (comma separated)",
+    value="",
+    help="Add custom tickers separated by commas.",
+)
 if custom_ticker:
     tickers += [t.strip().upper() for t in custom_ticker.split(",") if t.strip()]
 
@@ -65,7 +94,7 @@ selected_methods = st.sidebar.multiselect(
     "Select Methods",
     method_options,
     default=["Z-Score", "I-Forest"],
-    help="Select one or more anomaly detection methods."
+    help="Select one or more anomaly detection methods.",
 )
 
 # Parameter controls
@@ -121,103 +150,126 @@ if st.sidebar.button("Load Data"):
             st.write(df.describe())
             st.markdown("**Price Trend**")
             fig1, y_data = build_price_chart(df, ticker)
-            st.plotly_chart(fig1, width='stretch')
+            st.plotly_chart(fig1, width="stretch")
 
             st.header("Anomaly Detection")
-            mask = df['Return'].notna()
+            mask = df["Return"].notna()
             method_labels = []
             if "Z-Score" in selected_methods:
-                mean, std = df['Return'].mean(), df['Return'].std()
-                df['Anomaly_zscore'] = np.abs(df['Return'] - mean) > zscore_threshold * std
-                method_labels.append(('Anomaly_zscore', 'Z-Score'))
+                mean, std = df["Return"].mean(), df["Return"].std()
+                df["Anomaly_zscore"] = np.abs(df["Return"] - mean) > zscore_threshold * std
+                method_labels.append(("Anomaly_zscore", "Z-Score"))
             if "I-Forest" in selected_methods:
                 iso = IsolationForest(contamination=iforest_contamination, random_state=42)
-                df['Anomaly_iforest'] = False
-                df.loc[mask, 'Anomaly_iforest'] = iso.fit_predict(df.loc[mask, ['Return']].values.reshape(-1,1)) == -1
-                method_labels.append(('Anomaly_iforest', 'I-Forest'))
+                df["Anomaly_iforest"] = False
+                df.loc[mask, "Anomaly_iforest"] = (
+                    iso.fit_predict(df.loc[mask, ["Return"]].values.reshape(-1, 1)) == -1
+                )
+                method_labels.append(("Anomaly_iforest", "I-Forest"))
             if "DBSCAN" in selected_methods:
                 db = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples)
-                df['Anomaly_dbscan'] = False
-                labels = db.fit_predict(df.loc[mask, ['Return']].values.reshape(-1,1))
-                df.loc[mask, 'Anomaly_dbscan'] = labels == -1
-                method_labels.append(('Anomaly_dbscan', 'DBSCAN'))
+                df["Anomaly_dbscan"] = False
+                labels = db.fit_predict(df.loc[mask, ["Return"]].values.reshape(-1, 1))
+                df.loc[mask, "Anomaly_dbscan"] = labels == -1
+                method_labels.append(("Anomaly_dbscan", "DBSCAN"))
             if "Prophet" in selected_methods:
                 try:
-                    prophet_df = df[['Close']].reset_index()
-                    prophet_df.columns = ['ds', 'y']
-                    prophet_df['ds'] = pd.to_datetime(prophet_df['ds']).dt.tz_localize(None)
+                    prophet_df = df[["Close"]].reset_index()
+                    prophet_df.columns = ["ds", "y"]
+                    prophet_df["ds"] = pd.to_datetime(prophet_df["ds"]).dt.tz_localize(None)
                     m = Prophet(daily_seasonality=True)
                     m.fit(prophet_df)
                     forecast = m.predict(m.make_future_dataframe(periods=0))
-                    df['Prophet_yhat'] = forecast['yhat'].values
-                    df['Prophet_resid'] = df['Close'].values - df['Prophet_yhat'].values
-                    df['Anomaly_prophet'] = np.abs(df['Prophet_resid']) > 3 * df['Prophet_resid'].std()
-                    method_labels.append(('Anomaly_prophet', 'Prophet'))
+                    df["Prophet_yhat"] = forecast["yhat"].values
+                    df["Prophet_resid"] = df["Close"].values - df["Prophet_yhat"].values
+                    df["Anomaly_prophet"] = (
+                        np.abs(df["Prophet_resid"]) > 3 * df["Prophet_resid"].std()
+                    )
+                    method_labels.append(("Anomaly_prophet", "Prophet"))
                 except Exception as e:
                     st.warning(f"Prophet failed: {e}")
-                    df['Anomaly_prophet'] = False
+                    df["Anomaly_prophet"] = False
             if "Rolling Quantile" in selected_methods:
                 # Rolling quantile anomaly detection
-                df['Q_low'] = df['Close'].rolling(window=rolling_window, min_periods=1).quantile(quantile_low)
-                df['Q_high'] = df['Close'].rolling(window=rolling_window, min_periods=1).quantile(quantile_high)
-                df['Anomaly_rolling_quantile'] = (df['Close'] < df['Q_low']) | (df['Close'] > df['Q_high'])
-                method_labels.append(('Anomaly_rolling_quantile', 'Rolling Quantile'))
+                df["Q_low"] = (
+                    df["Close"].rolling(window=rolling_window, min_periods=1).quantile(quantile_low)
+                )
+                df["Q_high"] = (
+                    df["Close"]
+                    .rolling(window=rolling_window, min_periods=1)
+                    .quantile(quantile_high)
+                )
+                df["Anomaly_rolling_quantile"] = (df["Close"] < df["Q_low"]) | (
+                    df["Close"] > df["Q_high"]
+                )
+                method_labels.append(("Anomaly_rolling_quantile", "Rolling Quantile"))
 
             st.subheader("Anomaly Visualization (Selected Methods)")
             anomaly_df = df.copy()
-            anomaly_df['Method'] = 'None'
+            anomaly_df["Method"] = "None"
             for col, label in method_labels:
-                anomaly_df.loc[anomaly_df[col], 'Method'] = label
-            pts = anomaly_df[anomaly_df['Method'] != 'None']
+                anomaly_df.loc[anomaly_df[col], "Method"] = label
+            pts = anomaly_df[anomaly_df["Method"] != "None"]
             fig_final = build_anomaly_chart(df, pts, y_data)
-            st.plotly_chart(fig_final, width='stretch')
+            st.plotly_chart(fig_final, width="stretch")
 
             # --- Export Plot as Image ---
             st.subheader("Export Visualization")
             import io
+
             img_bytes = fig_final.to_image(format="png") if hasattr(fig_final, "to_image") else None
             if img_bytes:
-                st.download_button("Download Plot as PNG", img_bytes, f"{ticker}_anomalies.png", mime="image/png")
+                st.download_button(
+                    "Download Plot as PNG", img_bytes, f"{ticker}_anomalies.png", mime="image/png"
+                )
             else:
-                st.info("Image export not supported in this environment. Try running locally with plotly >=5.0.")
+                st.info(
+                    "Image export not supported in this environment. Try running locally with plotly >=5.0."
+                )
 
             # --- Method Comparison & Benchmarking ---
             st.subheader("Method Comparison & Benchmarking")
             import time
+
             comparison = []
             for col, label in method_labels:
                 start = time.time()
                 anomaly_count = int(df[col].sum())
                 # Simple benchmarking: run method again and time it
-                if label == 'Z-Score':
-                    _ = np.abs(df['Return'] - df['Return'].mean()) > zscore_threshold * df['Return'].std()
-                elif label == 'I-Forest':
+                if label == "Z-Score":
+                    _ = (
+                        np.abs(df["Return"] - df["Return"].mean())
+                        > zscore_threshold * df["Return"].std()
+                    )
+                elif label == "I-Forest":
                     iso = IsolationForest(contamination=iforest_contamination, random_state=42)
-                    _ = iso.fit_predict(df.loc[mask, ['Return']].values.reshape(-1,1)) == -1
-                elif label == 'DBSCAN':
+                    _ = iso.fit_predict(df.loc[mask, ["Return"]].values.reshape(-1, 1)) == -1
+                elif label == "DBSCAN":
                     db = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples)
-                    _ = db.fit_predict(df.loc[mask, ['Return']].values.reshape(-1,1)) == -1
-                elif label == 'Prophet':
+                    _ = db.fit_predict(df.loc[mask, ["Return"]].values.reshape(-1, 1)) == -1
+                elif label == "Prophet":
                     try:
-                        prophet_df = df[['Close']].reset_index()
-                        prophet_df.columns = ['ds', 'y']
-                        prophet_df['ds'] = pd.to_datetime(prophet_df['ds']).dt.tz_localize(None)
+                        prophet_df = df[["Close"]].reset_index()
+                        prophet_df.columns = ["ds", "y"]
+                        prophet_df["ds"] = pd.to_datetime(prophet_df["ds"]).dt.tz_localize(None)
                         m = Prophet(daily_seasonality=True)
                         m.fit(prophet_df)
                         forecast = m.predict(m.make_future_dataframe(periods=0))
-                        resid = df['Close'].values - forecast['yhat'].values
+                        resid = df["Close"].values - forecast["yhat"].values
                         _ = np.abs(resid) > 3 * np.std(resid)
                     except:
                         pass
                 elapsed = time.time() - start
-                comparison.append({
-                    'Method': label,
-                    'Anomalies': anomaly_count,
-                    'Time (s)': round(elapsed, 3)
-                })
+                comparison.append(
+                    {"Method": label, "Anomalies": anomaly_count, "Time (s)": round(elapsed, 3)}
+                )
             st.dataframe(pd.DataFrame(comparison))
-            st.caption("This table compares the number of anomalies detected and the execution time for each method. Use it to evaluate which method is most sensitive or efficient for your data.")
+            st.caption(
+                "This table compares the number of anomalies detected and the execution time for each method. Use it to evaluate which method is most sensitive or efficient for your data."
+            )
 
-            st.download_button(f"Download {ticker} CSV", df.to_csv().encode('utf-8'), f"{ticker}_anomalies.csv")
+            st.download_button(
+                f"Download {ticker} CSV", df.to_csv().encode("utf-8"), f"{ticker}_anomalies.csv"
+            )
 else:
     st.info("Select parameters and click 'Load Data'.")

@@ -66,7 +66,8 @@ def render_login_panel(auth_service: AuthService) -> None:
             user_or_email = st.text_input("Username or Email")
             password = st.text_input("Password", type="password")
             if st.button("Login"):
-                if auth_service.authenticate_user(user_or_email, password):
+                ok, message = auth_service.authenticate_user_with_reason(user_or_email, password)
+                if ok:
                     username = (
                         auth_service.get_username_by_identifier(user_or_email) or user_or_email
                     )
@@ -77,4 +78,4 @@ def render_login_panel(auth_service: AuthService) -> None:
                     st.success(f"Login successful! Welcome, {username}.")
                     st.rerun()
                 else:
-                    st.error("Invalid username/email or password.")
+                    st.error(message or "Invalid username/email or password.")

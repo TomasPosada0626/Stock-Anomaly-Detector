@@ -2,6 +2,7 @@ import hashlib
 import os
 import sqlite3
 import sys
+from datetime import UTC, datetime, timedelta
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
@@ -171,3 +172,68 @@ def test_authenticate_upgrades_legacy_sha256_hash(tmp_path) -> None:
     new_hash = conn.execute("SELECT password FROM users WHERE username='legacyuser'").fetchone()[0]
     conn.close()
     assert new_hash.startswith("$2")
+
+
+def test_lockout_after_multiple_failed_attempts(tmp_path) -> None:
+    db_path = tmp_path / "lockout.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+    auth.register_user("lockeduser", "locked@email.com", "L", "U", "Strong*Pass1")
+
+    for _ in range(5):
+        ok, _ = auth.authenticate_user_with_reason("lockeduser", "wrong-password")
+        assert ok is False
+
+    ok, message = auth.authenticate_user_with_reason("lockeduser", "Strong*Pass1")
+    assert ok is False
+    assert "Too many failed attempts" in message
+
+
+def test_session_validity_and_invalidation(tmp_path) -> None:
+    db_path = tmp_path / "session.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+    auth.register_user("sesscheck", "sesscheck@email.com", "S", "C", "Strong*Pass1")
+
+    session_id = auth.create_session("sesscheck", ttl_minutes=1)
+    assert auth.is_session_valid(session_id) is True
+
+    auth.invalidate_session(session_id)
+    assert auth.is_session_valid(session_id) is False
+
+
+def test_expired_session_returns_invalid(tmp_path) -> None:
+    db_path = tmp_path / "expired.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
+        (
+            "expired-session",
+            "user",
+            datetime.now(UTC).isoformat(),
+            (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    assert auth.is_session_valid("expired-session") is False
+
+
+def test_audit_log_records_events(tmp_path) -> None:
+    db_path = tmp_path / "audit.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    auth.register_user("auduser", "aud@email.com", "A", "U", "Strong*Pass1")
+    auth.authenticate_user_with_reason("auduser", "Strong*Pass1")
+
+    conn = sqlite3.connect(str(db_path))
+    rows = conn.execute("SELECT event_type, success FROM auth_audit").fetchall()
+    conn.close()
+
+    assert any(r[0] == "register" and r[1] == 1 for r in rows)
+    assert any(r[0] == "login" and r[1] == 1 for r in rows)
