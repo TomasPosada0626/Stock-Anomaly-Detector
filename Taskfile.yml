@@ -1,0 +1,46 @@
+version: "3"
+
+tasks:
+  bootstrap:
+    desc: Create virtualenv and install app dependencies
+    cmds:
+      - python -m venv .venv
+      - ./.venv/Scripts/python -m pip install --upgrade pip
+      - ./.venv/Scripts/python -m pip install -r requirements.txt
+
+  run:
+    desc: Start Streamlit app
+    cmds:
+      - ./.venv/Scripts/python -m streamlit run src/app.py
+
+  test:
+    desc: Run test suite
+    cmds:
+      - ./.venv/Scripts/python -m pytest
+
+  quality:
+    desc: Run lint and format checks
+    cmds:
+      - ./.venv/Scripts/python -m ruff check src/services src/ui tests
+      - ./.venv/Scripts/python -m black --check src/services src/ui tests src/app.py
+
+  security:
+    desc: Run security scans
+    cmds:
+      - ./.venv/Scripts/python -m bandit -r src/services src/ui -ll
+      - ./.venv/Scripts/python -m pip_audit -r requirements.txt
+
+  coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - ./.venv/Scripts/python -m pytest --cov=src --cov-report=term-missing
+
+  smoke:cd:
+    desc: Local smoke check against deployed app URL
+    cmds:
+      - powershell -NoProfile -Command "$url='https://stock-anomaly-detector-tomas.streamlit.app/'; $response=Invoke-WebRequest -Uri $url -UseBasicParsing; if ($response.StatusCode -ne 200) { throw 'HTTP check failed' }; if ($response.Content -notmatch 'Stock Anomaly Detector|streamlit') { throw 'Content check failed' }; Write-Host 'Smoke check passed'"
+
+  data:download:
+    desc: Download all ticker csv files
+    cmds:
+      - ./.venv/Scripts/python scripts/download_all_tickers.py

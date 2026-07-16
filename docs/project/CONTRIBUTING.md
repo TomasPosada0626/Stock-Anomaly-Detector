@@ -42,9 +42,9 @@ If you add a new anomaly method, include at least:
 
 Update relevant docs when behavior changes:
 - `README.md`
-- `docs/FAQ.md`
-- `docs/DEPLOYMENT.md`
-- `docs/CHANGELOG.md`
+- `docs/guides/FAQ.md`
+- `docs/operations/DEPLOYMENT.md`
+- `docs/project/CHANGELOG.md`
 
 ## Pull Request Checklist
 

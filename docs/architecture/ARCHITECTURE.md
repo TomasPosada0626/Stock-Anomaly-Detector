@@ -11,7 +11,7 @@ This project is a single Streamlit application that combines UI and business log
 - Service layer: authentication and session logic in `src/services/auth_service.py`
 - Persistence layer: local SQLite file (`storage/users.db`) for user/session data
 - Observability layer: structured logging helpers in `src/services/observability.py`
-- Config layer: environment-driven settings in `src/config.py`
+- Config layer: environment-driven settings in `src/config/settings.py`
 
 ## Runtime Flow
 

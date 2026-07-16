@@ -1,18 +1,21 @@
-import streamlit as st
-
-st.set_page_config(page_title="Stock Anomaly Detector", layout="wide")
-import pandas as pd
-import numpy as np
+import time
 from datetime import datetime
-from sklearn.ensemble import IsolationForest
-from sklearn.cluster import DBSCAN
+
+import numpy as np
+import pandas as pd
+import streamlit as st
 from prophet import Prophet
+from sklearn.cluster import DBSCAN
+from sklearn.ensemble import IsolationForest
+
 from config import SESSION_TTL_MINUTES, USERS_DB_PATH
 from services.auth_service import AuthService
 from services.market_data_service import add_return_features, get_ticker_data
 from services.observability import get_logger
 from ui.auth_ui import render_login_panel
 from ui.charts import build_anomaly_chart, build_price_chart
+
+st.set_page_config(page_title="Stock Anomaly Detector", layout="wide")
 
 logger = get_logger("app")
 auth_service = AuthService(db_path=USERS_DB_PATH)
@@ -219,8 +222,6 @@ if st.sidebar.button("Load Data"):
 
             # --- Export Plot as Image ---
             st.subheader("Export Visualization")
-            import io
-
             img_bytes = fig_final.to_image(format="png") if hasattr(fig_final, "to_image") else None
             if img_bytes:
                 st.download_button(
@@ -233,8 +234,6 @@ if st.sidebar.button("Load Data"):
 
             # --- Method Comparison & Benchmarking ---
             st.subheader("Method Comparison & Benchmarking")
-            import time
-
             comparison = []
             for col, label in method_labels:
                 start = time.time()
@@ -261,7 +260,7 @@ if st.sidebar.button("Load Data"):
                         forecast = m.predict(m.make_future_dataframe(periods=0))
                         resid = df["Close"].values - forecast["yhat"].values
                         _ = np.abs(resid) > 3 * np.std(resid)
-                    except:
+                    except Exception:
                         pass
                 elapsed = time.time() - start
                 comparison.append(

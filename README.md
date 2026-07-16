@@ -43,6 +43,9 @@ src/
   app.py
   anomaly_methods.py
   utils.py
+  config/
+    __init__.py
+    settings.py
   services/
     auth_service.py
     market_data_service.py
@@ -61,13 +64,21 @@ data/
 scripts/
   download_all_tickers.py
 docs/
-  FAQ.md
-  DEPLOYMENT.md
-  ARCHITECTURE.md
-  CONTRIBUTING.md
-  CONTRIBUTORS.md
-  CHANGELOG.md
-  RUNBOOK.md
+  architecture/
+    ARCHITECTURE.md
+  guides/
+    FAQ.md
+  operations/
+    DEPLOYMENT.md
+    RUNBOOK.md
+  project/
+    CHANGELOG.md
+    CONTRIBUTING.md
+    CONTRIBUTORS.md
+config/
+  env/
+    .env.development.example
+    .env.production.example
 Dockerfile
 requirements.txt
 requirements-notebooks.txt
@@ -76,6 +87,7 @@ README.md
 pytest.ini
 pyproject.toml
 .env.example
+Taskfile.yml
 storage/
 ```
 
@@ -95,6 +107,11 @@ Optional: copy environment template and customize values:
 ```powershell
 Copy-Item .env.example .env
 ```
+
+For environment-specific baselines, you can also use:
+
+- `config/env/.env.development.example`
+- `config/env/.env.production.example`
 
 Open: http://localhost:8501
 
@@ -146,13 +163,13 @@ pip install -r requirements-notebooks.txt
 
 ## Available Documentation
 
-- Setup and usage: [docs/FAQ.md](docs/FAQ.md)
-- Deployment options: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- System design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Contribution workflow: [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
-- Version history: [docs/CHANGELOG.md](docs/CHANGELOG.md)
-- Contributors: [docs/CONTRIBUTORS.md](docs/CONTRIBUTORS.md)
-- Operations runbook: [docs/RUNBOOK.md](docs/RUNBOOK.md)
+- Setup and usage: [docs/guides/FAQ.md](docs/guides/FAQ.md)
+- Deployment options: [docs/operations/DEPLOYMENT.md](docs/operations/DEPLOYMENT.md)
+- System design: [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)
+- Contribution workflow: [docs/project/CONTRIBUTING.md](docs/project/CONTRIBUTING.md)
+- Version history: [docs/project/CHANGELOG.md](docs/project/CHANGELOG.md)
+- Contributors: [docs/project/CONTRIBUTORS.md](docs/project/CONTRIBUTORS.md)
+- Operations runbook: [docs/operations/RUNBOOK.md](docs/operations/RUNBOOK.md)
 
 ## Deployment Summary
 
