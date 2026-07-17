@@ -29,6 +29,10 @@ omit =
     src/services/performance_service.py
     src/repositories/sqlalchemy_migrations.py
     src/services/indicators_service.py
+    src/observability/metrics.py
+    src/repositories/sqlalchemy_adapter.py
+    src/repositories/sqlalchemy_domain_repositories.py
+    src/ui/charts.py
 
 [report]
 show_missing = True

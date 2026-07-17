@@ -251,7 +251,8 @@ class AuthService:
 
     @staticmethod
     def hash_password(password: str) -> str:
-        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+        return bytes(hashed).decode("utf-8")
 
     @staticmethod
     def _legacy_hash_password(password: str) -> str:
@@ -260,7 +261,7 @@ class AuthService:
     @classmethod
     def verify_password(cls, password: str, stored_hash: str) -> bool:
         if stored_hash.startswith("$2"):
-            return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+            return bool(bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8")))
         return cls._legacy_hash_password(password) == stored_hash
 
     @staticmethod
