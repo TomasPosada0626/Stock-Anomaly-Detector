@@ -64,7 +64,7 @@ def _csrf_token() -> str:
 
 
 def _is_valid_csrf(token: str) -> bool:
-    return verify_csrf_token(token, st.session_state)
+    return bool(verify_csrf_token(token, st.session_state))
 
 
 def _apply_theme() -> None:
