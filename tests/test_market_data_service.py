@@ -125,3 +125,34 @@ def test_add_return_features_handles_duplicate_close_columns() -> None:
     df = pd.DataFrame([[100, 101], [102, 103]], columns=["Close", "Close"])
     result = add_return_features(df)
     assert "Return" in result.columns
+
+
+def test_get_ticker_data_uses_memory_cache_after_first_call(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    idx = pd.date_range("2024-01-01", periods=5, freq="D")
+    calls = {"count": 0}
+
+    def fake_download(*args, **kwargs):
+        calls["count"] += 1
+        return pd.DataFrame({"Close": [100, 101, 102, 103, 104]}, index=idx)
+
+    first_df, first_downloaded, _ = get_ticker_data(
+        ticker="QQQ",
+        start_date=idx.min(),
+        end_date=idx.max(),
+        data_dir=str(data_dir),
+        download_fn=fake_download,
+    )
+    second_df, second_downloaded, _ = get_ticker_data(
+        ticker="QQQ",
+        start_date=idx.min(),
+        end_date=idx.max(),
+        data_dir=str(data_dir),
+        download_fn=fake_download,
+    )
+
+    assert first_downloaded is True
+    assert second_downloaded is False
+    assert calls["count"] == 1
+    assert not first_df.empty
+    assert not second_df.empty

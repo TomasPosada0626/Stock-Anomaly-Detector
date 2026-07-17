@@ -46,6 +46,9 @@ DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_resolve_project_path('sto
 SCHEDULER_INTERVAL_MINUTES = _positive(
     "SCHEDULER_INTERVAL_MINUTES", _int_env("SCHEDULER_INTERVAL_MINUTES", 15)
 )
+MARKET_DATA_CACHE_TTL_SECONDS = _positive(
+    "MARKET_DATA_CACHE_TTL_SECONDS", _int_env("MARKET_DATA_CACHE_TTL_SECONDS", 900)
+)
 STREAMLIT_APP_URL = os.getenv(
     "STREAMLIT_APP_URL", "https://quantvision-tomas.streamlit.app/"
 )

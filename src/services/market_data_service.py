@@ -1,18 +1,40 @@
 import os
+import time
 from typing import Callable, Optional, Tuple
 
 import pandas as pd
 import yfinance as yf
 
+from config import MARKET_DATA_CACHE_TTL_SECONDS
 from services.observability import get_logger
 
 DownloadFn = Callable[..., pd.DataFrame]
 logger = get_logger("market_data_service")
+_MEM_CACHE: dict[str, tuple[float, pd.DataFrame]] = {}
 
 
 def ensure_data_dir(data_dir: str) -> None:
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
+
+
+def _cache_key(ticker: str, start_date, end_date) -> str:
+    return f"{ticker.upper()}|{pd.to_datetime(start_date).date()}|{pd.to_datetime(end_date).date()}"
+
+
+def _get_memory_cache(key: str) -> Optional[pd.DataFrame]:
+    payload = _MEM_CACHE.get(key)
+    if payload is None:
+        return None
+    created_at, frame = payload
+    if (time.time() - created_at) > MARKET_DATA_CACHE_TTL_SECONDS:
+        _MEM_CACHE.pop(key, None)
+        return None
+    return frame.copy()
+
+
+def _set_memory_cache(key: str, frame: pd.DataFrame) -> None:
+    _MEM_CACHE[key] = (time.time(), frame.copy())
 
 
 def _extract_ticker_columns(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
@@ -51,11 +73,18 @@ def get_ticker_data(
 ) -> Tuple[pd.DataFrame, bool, Optional[str]]:
     ensure_data_dir(data_dir)
     csv_path = os.path.join(data_dir, f"{ticker}_10y.csv")
+    cache_key = _cache_key(ticker, start_date, end_date)
+
+    cached_mem = _get_memory_cache(cache_key)
+    if cached_mem is not None and not cached_mem.empty:
+        logger.info("memory_cache_hit ticker=%s", ticker)
+        return cached_mem, False, None
 
     if os.path.exists(csv_path):
         try:
             cached = load_cached_ticker_data(csv_path, ticker)
             if _covers_date_range(cached, start_date, end_date):
+                _set_memory_cache(cache_key, cached)
                 logger.info("cache_hit ticker=%s path=%s", ticker, csv_path)
                 return cached, False, None
         except Exception as cache_error:
@@ -68,6 +97,7 @@ def get_ticker_data(
         return downloaded, True, f"No data found for {ticker} in selected date range."
 
     downloaded.to_csv(csv_path)
+    _set_memory_cache(cache_key, downloaded)
     logger.info("download_saved ticker=%s path=%s", ticker, csv_path)
     return downloaded, True, None
 
