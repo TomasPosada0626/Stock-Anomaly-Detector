@@ -15,7 +15,9 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 class AlertScheduler:
-    def __init__(self, alerts_service: AlertsService, fetch_market_data: Callable[[str], pd.DataFrame]) -> None:
+    def __init__(
+        self, alerts_service: AlertsService, fetch_market_data: Callable[[str], pd.DataFrame]
+    ) -> None:
         self.alerts_service = alerts_service
         self.fetch_market_data = fetch_market_data
         self.logger = get_logger("scheduler_service")
@@ -61,7 +63,9 @@ class AlertScheduler:
             if triggered:
                 self.alerts_service.emit_alert(username, ticker, alert_type, message)
                 triggered_count += 1
-        self.logger.info("scheduled_alert_evaluation username=%s triggered=%s", username, triggered_count)
+        self.logger.info(
+            "scheduled_alert_evaluation username=%s triggered=%s", username, triggered_count
+        )
         return triggered_count
 
     def start(self, username: str, interval_minutes: int = 15) -> bool:

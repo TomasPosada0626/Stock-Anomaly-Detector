@@ -26,11 +26,25 @@ def test_portfolio_service_sqlalchemy_mode(monkeypatch) -> None:
             return None
 
         def list_positions(self, username):
-            return pd.DataFrame([{"id": 1, "ticker": "AAPL", "quantity": 2, "buy_price": 100, "buy_date": "2026-01-01"}])
+            return pd.DataFrame(
+                [
+                    {
+                        "id": 1,
+                        "ticker": "AAPL",
+                        "quantity": 2,
+                        "buy_price": 100,
+                        "buy_date": "2026-01-01",
+                    }
+                ]
+            )
 
     monkeypatch.setattr(portfolio_module, "SqlPortfolioRepository", FakeRepo)
     svc = PortfolioService(use_sqlalchemy=True)
-    svc.add_position(PositionInput(username="alice", ticker="AAPL", quantity=2, buy_price=100, buy_date="2026-01-01"))
+    svc.add_position(
+        PositionInput(
+            username="alice", ticker="AAPL", quantity=2, buy_price=100, buy_date="2026-01-01"
+        )
+    )
     listed = svc.list_positions("alice")
     assert not listed.empty
 
@@ -68,7 +82,9 @@ def test_alerts_service_sqlalchemy_mode(monkeypatch) -> None:
             return 7
 
         def list_rules(self, username):
-            return pd.DataFrame([{"id": 7, "ticker": "AAPL", "alert_type": "new_high", "active": 1}])
+            return pd.DataFrame(
+                [{"id": 7, "ticker": "AAPL", "alert_type": "new_high", "active": 1}]
+            )
 
         def delete_rule(self, rule_id, username):
             return None

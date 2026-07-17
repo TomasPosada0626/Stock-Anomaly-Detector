@@ -25,7 +25,11 @@ class AlertRule:
 
 
 class AlertsService:
-    def __init__(self, db_path: str = "storage/quantvision.db", use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES) -> None:
+    def __init__(
+        self,
+        db_path: str = "storage/quantvision.db",
+        use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES,
+    ) -> None:
         self.db_path = db_path
         self._repo = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -43,8 +47,7 @@ class AlertsService:
         if self._repo is not None:
             return
         conn = self._conn()
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS alert_rules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
@@ -54,10 +57,8 @@ class AlertsService:
                 active INTEGER NOT NULL,
                 created_at TEXT NOT NULL
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS alert_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
@@ -66,8 +67,7 @@ class AlertsService:
                 message TEXT NOT NULL,
                 triggered_at TEXT NOT NULL
             )
-            """
-        )
+            """)
         conn.commit()
         conn.close()
 
@@ -161,6 +161,8 @@ class AlertsService:
             return self._repo.list_rule_owners()
 
         conn = self._conn()
-        rows = conn.execute("SELECT DISTINCT username FROM alert_rules WHERE username != ''").fetchall()
+        rows = conn.execute(
+            "SELECT DISTINCT username FROM alert_rules WHERE username != ''"
+        ).fetchall()
         conn.close()
         return sorted(str(row[0]) for row in rows if row and row[0])

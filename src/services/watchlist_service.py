@@ -22,7 +22,11 @@ class WatchlistInput:
 
 
 class WatchlistService:
-    def __init__(self, db_path: str = "storage/quantvision.db", use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES) -> None:
+    def __init__(
+        self,
+        db_path: str = "storage/quantvision.db",
+        use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES,
+    ) -> None:
         self.db_path = db_path
         self._repo = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -40,8 +44,7 @@ class WatchlistService:
         if self._repo is not None:
             return
         conn = self._conn()
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS watchlists (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
@@ -49,10 +52,8 @@ class WatchlistService:
                 created_at TEXT NOT NULL,
                 UNIQUE(username, name)
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS watchlist_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 watchlist_id INTEGER NOT NULL,
@@ -61,8 +62,7 @@ class WatchlistService:
                 UNIQUE(watchlist_id, ticker),
                 FOREIGN KEY(watchlist_id) REFERENCES watchlists(id)
             )
-            """
-        )
+            """)
         conn.commit()
         conn.close()
 
@@ -92,7 +92,9 @@ class WatchlistService:
             "DELETE FROM watchlist_items WHERE watchlist_id IN (SELECT id FROM watchlists WHERE id = ? AND username = ?)",
             (watchlist_id, username),
         )
-        conn.execute("DELETE FROM watchlists WHERE id = ? AND username = ?", (watchlist_id, username))
+        conn.execute(
+            "DELETE FROM watchlists WHERE id = ? AND username = ?", (watchlist_id, username)
+        )
         conn.commit()
         conn.close()
 

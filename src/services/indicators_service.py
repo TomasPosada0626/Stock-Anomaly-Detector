@@ -70,8 +70,16 @@ def adx(df: pd.DataFrame, window: int = 14) -> pd.Series:
     minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
 
     tr = atr(checked, window=window) * window
-    plus_di = 100 * pd.Series(plus_dm, index=checked.index).ewm(alpha=1 / window, adjust=False).mean() / tr
-    minus_di = 100 * pd.Series(minus_dm, index=checked.index).ewm(alpha=1 / window, adjust=False).mean() / tr
+    plus_di = (
+        100
+        * pd.Series(plus_dm, index=checked.index).ewm(alpha=1 / window, adjust=False).mean()
+        / tr
+    )
+    minus_di = (
+        100
+        * pd.Series(minus_dm, index=checked.index).ewm(alpha=1 / window, adjust=False).mean()
+        / tr
+    )
     dx = ((plus_di - minus_di).abs() / (plus_di + minus_di).replace(0.0, np.nan)) * 100
     return dx.ewm(alpha=1 / window, min_periods=window, adjust=False).mean()
 

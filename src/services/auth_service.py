@@ -134,9 +134,7 @@ class AuthService:
             if "role" not in columns:
                 cursor.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'ANALYST'")
                 conn.commit()
-            cursor.execute(
-                "UPDATE users SET role='ANALYST' WHERE role IS NULL OR TRIM(role)=''"
-            )
+            cursor.execute("UPDATE users SET role='ANALYST' WHERE role IS NULL OR TRIM(role)=''")
             conn.commit()
         conn.close()
 

@@ -22,7 +22,9 @@ def main() -> None:
     scheduler = AlertScheduler(alerts, fetch_market_data=_fetch_market_frame)
     started = scheduler.start(username="system", interval_minutes=SCHEDULER_INTERVAL_MINUTES)
     if started:
-        print(f"QuantVision scheduler running every {SCHEDULER_INTERVAL_MINUTES} minute(s) with APScheduler")
+        print(
+            f"QuantVision scheduler running every {SCHEDULER_INTERVAL_MINUTES} minute(s) with APScheduler"
+        )
         return
 
     if SCHEDULER_RUN_CONTINUOUS:

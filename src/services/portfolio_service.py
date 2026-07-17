@@ -25,7 +25,11 @@ class PositionInput:
 
 
 class PortfolioService:
-    def __init__(self, db_path: str = "storage/quantvision.db", use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES) -> None:
+    def __init__(
+        self,
+        db_path: str = "storage/quantvision.db",
+        use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES,
+    ) -> None:
         self.db_path = db_path
         self._repo = None
         db_dir = Path(db_path).parent
@@ -44,8 +48,7 @@ class PortfolioService:
         if self._repo is not None:
             return
         conn = self._conn()
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS portfolio_positions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
@@ -55,8 +58,7 @@ class PortfolioService:
                 buy_date TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
-            """
-        )
+            """)
         conn.commit()
         conn.close()
 
@@ -114,7 +116,9 @@ class PortfolioService:
         conn.close()
         return df
 
-    def compute_portfolio_metrics(self, username: str, latest_prices: dict[str, float]) -> dict[str, float]:
+    def compute_portfolio_metrics(
+        self, username: str, latest_prices: dict[str, float]
+    ) -> dict[str, float]:
         positions = self.list_positions(username)
         if positions.empty:
             return {

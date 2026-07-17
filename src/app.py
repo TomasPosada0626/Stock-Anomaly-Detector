@@ -116,7 +116,9 @@ def _run_anomaly_methods(
 
         if method == "Z-Score":
             col_name = "Anomaly_zscore"
-            model_df[col_name] = detect_anomalies_zscore(model_df["Return"], threshold=zscore_threshold)
+            model_df[col_name] = detect_anomalies_zscore(
+                model_df["Return"], threshold=zscore_threshold
+            )
             params = {"threshold": zscore_threshold}
         elif method == "I-Forest":
             col_name = "Anomaly_iforest"
@@ -150,8 +152,16 @@ def _run_anomaly_methods(
             params = {"residual_threshold": 3.0}
         elif method == "Rolling Quantile":
             col_name = "Anomaly_rolling_quantile"
-            lower = model_df["Close"].rolling(window=rolling_window, min_periods=1).quantile(quantile_low)
-            upper = model_df["Close"].rolling(window=rolling_window, min_periods=1).quantile(quantile_high)
+            lower = (
+                model_df["Close"]
+                .rolling(window=rolling_window, min_periods=1)
+                .quantile(quantile_low)
+            )
+            upper = (
+                model_df["Close"]
+                .rolling(window=rolling_window, min_periods=1)
+                .quantile(quantile_high)
+            )
             model_df[col_name] = (model_df["Close"] < lower) | (model_df["Close"] > upper)
             params = {"window": rolling_window, "q_low": quantile_low, "q_high": quantile_high}
         elif method == "LOF":
@@ -261,7 +271,9 @@ def _render_dashboard(market_data: dict[str, pd.DataFrame], focus_ticker: str) -
     daily_change_pct = ((current_price / previous_price) - 1) * 100 if previous_price else 0.0
     market_cap_proxy = current_price * float(df["Volume"].tail(20).mean())
     pe_proxy = max(0.0, current_price / max(0.5, float(df["Close"].tail(252).mean()) * 0.08))
-    dividend_yield_proxy = max(0.0, min(8.0, float(df["Close"].pct_change().rolling(252).mean().iloc[-1] * 100)))
+    dividend_yield_proxy = max(
+        0.0, min(8.0, float(df["Close"].pct_change().rolling(252).mean().iloc[-1] * 100))
+    )
     beta_proxy = 1.0 + float(df["Return"].rolling(63).std().fillna(0).iloc[-1]) * 5
     high_52 = float(df["Close"].tail(252).max())
     low_52 = float(df["Close"].tail(252).min())
@@ -344,14 +356,20 @@ def _render_comparison(market_data: dict[str, pd.DataFrame]) -> None:
                 "Ticker": ticker,
                 "Return %": float(cumulative[ticker].iloc[-1] * 100),
                 "Volatility %": float(r.std(ddof=0) * np.sqrt(252) * 100),
-                "Sharpe": float((r.mean() / r.std(ddof=0) * np.sqrt(252)) if r.std(ddof=0) > 0 else 0),
+                "Sharpe": float(
+                    (r.mean() / r.std(ddof=0) * np.sqrt(252)) if r.std(ddof=0) > 0 else 0
+                ),
                 "Max Drawdown %": float(drawdowns[ticker].min() * 100),
             }
         )
 
     st.dataframe(pd.DataFrame(summary_rows), width="stretch")
-    st.plotly_chart(build_comparison_chart(compare_df, "Multi-Asset Price Comparison"), width="stretch")
-    st.plotly_chart(build_comparison_chart(cumulative, "Cumulative Return Comparison"), width="stretch")
+    st.plotly_chart(
+        build_comparison_chart(compare_df, "Multi-Asset Price Comparison"), width="stretch"
+    )
+    st.plotly_chart(
+        build_comparison_chart(cumulative, "Cumulative Return Comparison"), width="stretch"
+    )
     st.markdown("### Correlation Matrix")
     st.dataframe(returns.corr(), width="stretch")
 
@@ -399,7 +417,9 @@ def _render_watchlists(username: str) -> None:
         name = st.text_input("Watchlist name", value="Technology")
         create = st.form_submit_button("Create / Get")
         if create and name.strip():
-            watchlist_id = watchlist_service.create_watchlist(WatchlistInput(username=username, name=name))
+            watchlist_id = watchlist_service.create_watchlist(
+                WatchlistInput(username=username, name=name)
+            )
             st.session_state["active_watchlist_id"] = watchlist_id
             st.success(f"Watchlist ready: {name}")
 
@@ -409,7 +429,9 @@ def _render_watchlists(username: str) -> None:
         return
 
     selected_id = int(
-        st.selectbox("Active watchlist", options=watchlists["id"].tolist(), index=0, key="watchlist_id")
+        st.selectbox(
+            "Active watchlist", options=watchlists["id"].tolist(), index=0, key="watchlist_id"
+        )
     )
     items = watchlist_service.list_items(selected_id)
     st.write("Tickers", ", ".join(items["ticker"].tolist()) if not items.empty else "(empty)")
@@ -427,7 +449,9 @@ def _render_watchlists(username: str) -> None:
             st.rerun()
 
 
-def _evaluate_alert_conditions(df: pd.DataFrame, rule_type: str, threshold: float | None) -> tuple[bool, str]:
+def _evaluate_alert_conditions(
+    df: pd.DataFrame, rule_type: str, threshold: float | None
+) -> tuple[bool, str]:
     if len(df) < 3:
         return False, "insufficient data"
 
@@ -444,9 +468,9 @@ def _evaluate_alert_conditions(df: pd.DataFrame, rule_type: str, threshold: floa
         triggered = float(current.get("RSI_14", 100)) < 30
         return triggered, f"RSI at {current.get('RSI_14', 0):.2f}"
     if rule_type == "macd_crossover":
-        triggered = float(previous.get("MACD", 0)) <= float(previous.get("MACD_Signal", 0)) and float(
-            current.get("MACD", 0)
-        ) > float(current.get("MACD_Signal", 0))
+        triggered = float(previous.get("MACD", 0)) <= float(
+            previous.get("MACD_Signal", 0)
+        ) and float(current.get("MACD", 0)) > float(current.get("MACD_Signal", 0))
         return triggered, "MACD bullish crossover"
     if rule_type == "ema_crossover":
         triggered = float(previous.get("EMA_20", 0)) <= float(previous.get("SMA_20", 0)) and float(
@@ -551,12 +575,12 @@ def _render_risk(market_data: dict[str, pd.DataFrame], focus_ticker: str) -> Non
     asset_df = market_data[focus_ticker]
     benchmark_options = [ticker for ticker in market_data.keys() if ticker != focus_ticker]
     benchmark_name = (
-        st.selectbox("Benchmark", options=benchmark_options, index=0)
-        if benchmark_options
-        else ""
+        st.selectbox("Benchmark", options=benchmark_options, index=0) if benchmark_options else ""
     )
     benchmark_returns = (
-        market_data[benchmark_name]["Return"] if benchmark_name and benchmark_name in market_data else None
+        market_data[benchmark_name]["Return"]
+        if benchmark_name and benchmark_name in market_data
+        else None
     )
     risk = summarize_risk(asset_df["Return"], benchmark_returns=benchmark_returns)
     st.dataframe(pd.DataFrame([risk]), width="stretch")
@@ -578,9 +602,11 @@ def _render_reports(market_data: dict[str, pd.DataFrame], username: str) -> None
     kpis = {
         "Current Price": float(df["Close"].iloc[-1]),
         "Average Volume": float(df["Volume"].tail(20).mean()),
-        "Return 1Y %": float(((df["Close"].iloc[-1] / df["Close"].tail(252).iloc[0]) - 1) * 100)
-        if len(df) >= 252
-        else float(((df["Close"].iloc[-1] / df["Close"].iloc[0]) - 1) * 100),
+        "Return 1Y %": (
+            float(((df["Close"].iloc[-1] / df["Close"].tail(252).iloc[0]) - 1) * 100)
+            if len(df) >= 252
+            else float(((df["Close"].iloc[-1] / df["Close"].iloc[0]) - 1) * 100)
+        ),
         "Volatility": float(risk_summary["Volatility"]),
         "Sharpe": float(risk_summary["Sharpe Ratio"]),
     }
@@ -720,7 +746,9 @@ params = {
 }
 
 if st.sidebar.button("Load / Refresh Market Data"):
-    st.session_state["market_data"] = _load_market_data(tickers, start_date, end_date, uploaded_file)
+    st.session_state["market_data"] = _load_market_data(
+        tickers, start_date, end_date, uploaded_file
+    )
 
 market_data = st.session_state.get("market_data", {})
 focus_ticker = st.sidebar.selectbox(

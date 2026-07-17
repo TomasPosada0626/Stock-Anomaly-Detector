@@ -49,7 +49,9 @@ MAX_FAILED_LOGIN_ATTEMPTS = _positive(
 LOCKOUT_MINUTES = _positive("LOCKOUT_MINUTES", _int_env("LOCKOUT_MINUTES", 15))
 USERS_DB_PATH = _resolve_project_path(os.getenv("USERS_DB_PATH", "storage/users.db"))
 APP_LOG_DIR = _resolve_project_path(os.getenv("APP_LOG_DIR", "storage/logs"))
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_resolve_project_path('storage/quantvision.db')}")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", f"sqlite:///{_resolve_project_path('storage/quantvision.db')}"
+)
 SCHEDULER_INTERVAL_MINUTES = _positive(
     "SCHEDULER_INTERVAL_MINUTES", _int_env("SCHEDULER_INTERVAL_MINUTES", 15)
 )
@@ -58,9 +60,7 @@ MARKET_DATA_CACHE_TTL_SECONDS = _positive(
 )
 USE_SQLALCHEMY_REPOSITORIES = _bool_env("USE_SQLALCHEMY_REPOSITORIES", False)
 SCHEDULER_RUN_CONTINUOUS = _bool_env("SCHEDULER_RUN_CONTINUOUS", True)
-STREAMLIT_APP_URL = os.getenv(
-    "STREAMLIT_APP_URL", "https://quantvision-tomas.streamlit.app/"
-)
+STREAMLIT_APP_URL = os.getenv("STREAMLIT_APP_URL", "https://quantvision-tomas.streamlit.app/")
 
 if ENVIRONMENT == "production":
     USERS_DB_PATH = _resolve_project_path(_required_env("USERS_DB_PATH"))

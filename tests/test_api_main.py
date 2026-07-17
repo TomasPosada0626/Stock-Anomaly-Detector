@@ -81,7 +81,9 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
             return pd.DataFrame([{"ticker": "AAPL", "alert_type": "rsi_gt_70", "message": "x"}])
 
         def list_rules(self, username: str):
-            return pd.DataFrame([{"id": 5, "ticker": "AAPL", "alert_type": "rsi_gt_70", "active": 1}])
+            return pd.DataFrame(
+                [{"id": 5, "ticker": "AAPL", "alert_type": "rsi_gt_70", "active": 1}]
+            )
 
         def create_rule(self, rule):
             return 5
@@ -124,7 +126,24 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
 
     monkeypatch.setattr(api_main, "FastAPI", FakeApp)
     monkeypatch.setattr(api_main, "HTTPException", FakeHTTPException)
-    monkeypatch.setattr(api_main, "get_ticker_data", lambda ticker, start_date, end_date: (pd.DataFrame({"Close": [100, 101, 102], "Open": [99, 100, 101], "High": [101, 102, 103], "Low": [98, 99, 100], "Volume": [1000, 1100, 900]}, index=pd.date_range("2026-01-01", periods=3, freq="D")), False, None))
+    monkeypatch.setattr(
+        api_main,
+        "get_ticker_data",
+        lambda ticker, start_date, end_date: (
+            pd.DataFrame(
+                {
+                    "Close": [100, 101, 102],
+                    "Open": [99, 100, 101],
+                    "High": [101, 102, 103],
+                    "Low": [98, 99, 100],
+                    "Volume": [1000, 1100, 900],
+                },
+                index=pd.date_range("2026-01-01", periods=3, freq="D"),
+            ),
+            False,
+            None,
+        ),
+    )
 
     app = api_main.create_app(
         FakeAuth(),
@@ -169,17 +188,29 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
     positions = app.routes["/users/{username}/portfolio/positions"]("alice")
     assert len(positions) == 1
 
-    payload_position = type("PositionPayload", (), {"ticker": "AAPL", "quantity": 1.0, "buy_price": 100.0, "buy_date": "2026-01-01"})()
-    created_position = app.routes["POST /users/{username}/portfolio/positions"]("alice", payload=payload_position)
+    payload_position = type(
+        "PositionPayload",
+        (),
+        {"ticker": "AAPL", "quantity": 1.0, "buy_price": 100.0, "buy_date": "2026-01-01"},
+    )()
+    created_position = app.routes["POST /users/{username}/portfolio/positions"](
+        "alice", payload=payload_position
+    )
     assert created_position["id"] == 99
 
-    deleted_position = app.routes["DELETE /users/{username}/portfolio/positions/{position_id}"]("alice", position_id=99)
+    deleted_position = app.routes["DELETE /users/{username}/portfolio/positions/{position_id}"](
+        "alice", position_id=99
+    )
     assert deleted_position["deleted"] is True
 
     rules = app.routes["/users/{username}/alerts/rules"]("alice")
     assert len(rules) == 1
 
-    payload_rule = type("RulePayload", (), {"ticker": "AAPL", "alert_type": "rsi_gt_70", "threshold": None, "active": True})()
+    payload_rule = type(
+        "RulePayload",
+        (),
+        {"ticker": "AAPL", "alert_type": "rsi_gt_70", "threshold": None, "active": True},
+    )()
     created_rule = app.routes["POST /users/{username}/alerts/rules"]("alice", payload=payload_rule)
     assert created_rule["id"] == 5
 
@@ -187,11 +218,15 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
     assert deleted_rule["deleted"] is True
 
     payload_watchlist = type("WatchlistPayload", (), {"name": "Tech"})()
-    created_watchlist = app.routes["POST /users/{username}/watchlists"]("alice", payload=payload_watchlist)
+    created_watchlist = app.routes["POST /users/{username}/watchlists"](
+        "alice", payload=payload_watchlist
+    )
     assert created_watchlist["id"] == 1
 
     payload_item = type("ItemPayload", (), {"ticker": "NVDA"})()
-    added_item = app.routes["POST /users/{username}/watchlists/{watchlist_id}/items"]("alice", watchlist_id=1, payload=payload_item)
+    added_item = app.routes["POST /users/{username}/watchlists/{watchlist_id}/items"](
+        "alice", watchlist_id=1, payload=payload_item
+    )
     assert added_item["added"] is True
 
     removed_item = app.routes["DELETE /users/{username}/watchlists/{watchlist_id}/items/{ticker}"](

@@ -454,6 +454,7 @@ def test_cleanup_expired_sessions_removes_old_rows(tmp_path) -> None:
     assert deleted >= 1
     assert auth.is_session_valid("old-session") is False
 
+
 def test_user_roles_default_update_and_policy(tmp_path) -> None:
     db_path = tmp_path / "roles.db"
     auth = AuthService(str(db_path))

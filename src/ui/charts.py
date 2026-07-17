@@ -115,7 +115,9 @@ def build_terminal_multiview(df: pd.DataFrame, ticker: str) -> go.Figure:
     )
     if "RSI_14" in df.columns:
         fig.add_trace(
-            go.Scatter(x=df.index, y=df["RSI_14"], mode="lines", name="RSI(14)", line={"color": "#f5a623"}),
+            go.Scatter(
+                x=df.index, y=df["RSI_14"], mode="lines", name="RSI(14)", line={"color": "#f5a623"}
+            ),
             row=3,
             col=1,
         )

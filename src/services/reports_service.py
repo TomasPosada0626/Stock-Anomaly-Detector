@@ -84,9 +84,13 @@ class ReportsService:
             lines.append("")
         return self._minimal_pdf_from_lines(lines)
 
-    def build_executive_report(self, title: str, kpis: dict[str, float], benchmark: pd.DataFrame) -> bytes:
+    def build_executive_report(
+        self, title: str, kpis: dict[str, float], benchmark: pd.DataFrame
+    ) -> bytes:
         sections = {
-            "Executive KPIs": {k: f"{v:.4f}" if isinstance(v, (float, int)) else v for k, v in kpis.items()},
+            "Executive KPIs": {
+                k: f"{v:.4f}" if isinstance(v, (float, int)) else v for k, v in kpis.items()
+            },
             "Model Benchmark": benchmark,
         }
         return self.to_pdf_bytes(title=title, sections=sections)

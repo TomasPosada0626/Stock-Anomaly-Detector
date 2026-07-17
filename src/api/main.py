@@ -25,6 +25,7 @@ except Exception:  # pragma: no cover - optional dependency
     def Field(*args, **kwargs):  # type: ignore[override]
         return None
 
+
 try:
     from fastapi import FastAPI, HTTPException
 except Exception:  # pragma: no cover - optional dependency
@@ -79,7 +80,9 @@ def create_app(
     backtesting_service: BacktestingService | None = None,
 ):
     if FastAPI is None:
-        raise RuntimeError("FastAPI is not installed. Add fastapi and uvicorn to run the API layer.")
+        raise RuntimeError(
+            "FastAPI is not installed. Add fastapi and uvicorn to run the API layer."
+        )
 
     auth = auth_service or AuthService()
     portfolio = portfolio_service or PortfolioService()
@@ -99,7 +102,9 @@ def create_app(
 
     def _authorize_module(username: str, module_name: str) -> None:
         if not auth.can_access_module(username, module_name):
-            raise HTTPException(status_code=403, detail=f"forbidden: role cannot access {module_name}")
+            raise HTTPException(
+                status_code=403, detail=f"forbidden: role cannot access {module_name}"
+            )
 
     @_route("get", "/health")
     def health() -> dict[str, str]:
@@ -192,7 +197,9 @@ def create_app(
     @_route("post", "/users/{username}/watchlists")
     def user_watchlists_create(username: str, payload: WatchlistCreate):
         _authorize_module(username, "Watchlists")
-        watchlist_id = watchlists.create_watchlist(WatchlistInput(username=username, name=payload.name))
+        watchlist_id = watchlists.create_watchlist(
+            WatchlistInput(username=username, name=payload.name)
+        )
         return {"id": int(watchlist_id)}
 
     @_route("delete", "/users/{username}/watchlists/{watchlist_id}")

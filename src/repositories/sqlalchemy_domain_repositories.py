@@ -54,7 +54,9 @@ class SqlPortfolioRepository(_BaseSqlRepository):
         )
         self.meta.create_all(self.engine)
 
-    def add_position(self, username: str, ticker: str, quantity: float, buy_price: float, buy_date: str) -> int:
+    def add_position(
+        self, username: str, ticker: str, quantity: float, buy_price: float, buy_date: str
+    ) -> int:
         assert insert is not None
         with self.engine.begin() as conn:
             result = conn.execute(
@@ -130,17 +132,24 @@ class SqlWatchlistRepository(_BaseSqlRepository):
             if existing:
                 return int(existing[0])
             result = conn.execute(
-                insert(self.watchlists).values(username=username, name=name_clean, created_at=self._now())
+                insert(self.watchlists).values(
+                    username=username, name=name_clean, created_at=self._now()
+                )
             )
             return int(result.inserted_primary_key[0])
 
     def delete_watchlist(self, watchlist_id: int, username: str) -> None:
         assert delete is not None
         with self.engine.begin() as conn:
-            conn.execute(delete(self.watchlist_items).where(self.watchlist_items.c.watchlist_id == int(watchlist_id)))
+            conn.execute(
+                delete(self.watchlist_items).where(
+                    self.watchlist_items.c.watchlist_id == int(watchlist_id)
+                )
+            )
             conn.execute(
                 delete(self.watchlists).where(
-                    self.watchlists.c.id == int(watchlist_id), self.watchlists.c.username == username
+                    self.watchlists.c.id == int(watchlist_id),
+                    self.watchlists.c.username == username,
                 )
             )
 
@@ -156,7 +165,9 @@ class SqlWatchlistRepository(_BaseSqlRepository):
             if not exists:
                 conn.execute(
                     insert(self.watchlist_items).values(
-                        watchlist_id=int(watchlist_id), ticker=ticker.upper(), created_at=self._now()
+                        watchlist_id=int(watchlist_id),
+                        ticker=ticker.upper(),
+                        created_at=self._now(),
                     )
                 )
 
@@ -173,21 +184,31 @@ class SqlWatchlistRepository(_BaseSqlRepository):
     def list_watchlists(self, username: str) -> pd.DataFrame:
         assert select is not None
         with self.engine.begin() as conn:
-            rows = conn.execute(
-                select(self.watchlists.c.id, self.watchlists.c.name, self.watchlists.c.created_at)
-                .where(self.watchlists.c.username == username)
-                .order_by(self.watchlists.c.created_at.asc())
-            ).mappings().all()
+            rows = (
+                conn.execute(
+                    select(
+                        self.watchlists.c.id, self.watchlists.c.name, self.watchlists.c.created_at
+                    )
+                    .where(self.watchlists.c.username == username)
+                    .order_by(self.watchlists.c.created_at.asc())
+                )
+                .mappings()
+                .all()
+            )
         return pd.DataFrame(rows)
 
     def list_items(self, watchlist_id: int) -> pd.DataFrame:
         assert select is not None
         with self.engine.begin() as conn:
-            rows = conn.execute(
-                select(self.watchlist_items.c.ticker)
-                .where(self.watchlist_items.c.watchlist_id == int(watchlist_id))
-                .order_by(self.watchlist_items.c.ticker.asc())
-            ).mappings().all()
+            rows = (
+                conn.execute(
+                    select(self.watchlist_items.c.ticker)
+                    .where(self.watchlist_items.c.watchlist_id == int(watchlist_id))
+                    .order_by(self.watchlist_items.c.ticker.asc())
+                )
+                .mappings()
+                .all()
+            )
         return pd.DataFrame(rows)
 
 
@@ -218,7 +239,9 @@ class SqlAlertsRepository(_BaseSqlRepository):
         )
         self.meta.create_all(self.engine)
 
-    def create_rule(self, username: str, ticker: str, alert_type: str, threshold: float | None, active: bool) -> int:
+    def create_rule(
+        self, username: str, ticker: str, alert_type: str, threshold: float | None, active: bool
+    ) -> int:
         assert insert is not None
         with self.engine.begin() as conn:
             result = conn.execute(
@@ -252,7 +275,11 @@ class SqlAlertsRepository(_BaseSqlRepository):
     def delete_rule(self, rule_id: int, username: str) -> None:
         assert delete is not None
         with self.engine.begin() as conn:
-            conn.execute(delete(self.rules).where(self.rules.c.id == int(rule_id), self.rules.c.username == username))
+            conn.execute(
+                delete(self.rules).where(
+                    self.rules.c.id == int(rule_id), self.rules.c.username == username
+                )
+            )
 
     def emit_alert(self, username: str, ticker: str, alert_type: str, message: str) -> int:
         assert insert is not None
@@ -271,17 +298,21 @@ class SqlAlertsRepository(_BaseSqlRepository):
     def list_history(self, username: str, limit: int = 200) -> pd.DataFrame:
         assert select is not None
         with self.engine.begin() as conn:
-            rows = conn.execute(
-                select(
-                    self.history.c.ticker,
-                    self.history.c.alert_type,
-                    self.history.c.message,
-                    self.history.c.triggered_at,
+            rows = (
+                conn.execute(
+                    select(
+                        self.history.c.ticker,
+                        self.history.c.alert_type,
+                        self.history.c.message,
+                        self.history.c.triggered_at,
+                    )
+                    .where(self.history.c.username == username)
+                    .order_by(self.history.c.id.desc())
+                    .limit(int(limit))
                 )
-                .where(self.history.c.username == username)
-                .order_by(self.history.c.id.desc())
-                .limit(int(limit))
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return pd.DataFrame(rows)
 
     def list_rule_owners(self) -> list[str]:

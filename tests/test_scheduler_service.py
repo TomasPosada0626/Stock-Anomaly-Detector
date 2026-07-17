@@ -58,7 +58,9 @@ def test_scheduler_multiple_rule_types_and_start_stop(monkeypatch, tmp_path) -> 
 
     db_path = str(tmp_path / "quantvision.db")
     alerts = AlertsService(db_path=db_path)
-    alerts.create_rule(AlertRule(username="bob", ticker="AAPL", alert_type="price_change_pct", threshold=1.0))
+    alerts.create_rule(
+        AlertRule(username="bob", ticker="AAPL", alert_type="price_change_pct", threshold=1.0)
+    )
     alerts.create_rule(AlertRule(username="bob", ticker="AAPL", alert_type="new_high"))
     alerts.create_rule(AlertRule(username="bob", ticker="AAPL", alert_type="new_low"))
 

@@ -12,7 +12,9 @@ from ui.charts import build_comparison_chart
 def test_reports_service_generates_csv_pdf_and_png() -> None:
     svc = ReportsService()
     idx = pd.date_range("2025-01-01", periods=5, freq="D")
-    df = pd.DataFrame({"Close": [10, 11, 12, 11, 13], "Volume": [100, 110, 120, 90, 130]}, index=idx)
+    df = pd.DataFrame(
+        {"Close": [10, 11, 12, 11, 13], "Volume": [100, 110, 120, 90, 130]}, index=idx
+    )
 
     csv_bytes = svc.to_csv_bytes(df)
     assert b"Close" in csv_bytes
