@@ -1,304 +1,181 @@
-# Stock Anomaly Detector
+﻿# QuantVision
 
-[![CI](https://github.com/TomasPosada0626/Stock-Anomaly-Detector/actions/workflows/ci.yml/badge.svg)](https://github.com/TomasPosada0626/Stock-Anomaly-Detector/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/TomasPosada0626/Stock-Anomaly-Detector/graph/badge.svg)](https://codecov.io/gh/TomasPosada0626/Stock-Anomaly-Detector)
+[![CI](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml/badge.svg)](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml)
+[![Coverage](https://codecov.io/gh/TomasPosada0626/QuantVision/graph/badge.svg)](https://codecov.io/gh/TomasPosada0626/QuantVision)
 
-Production-minded anomaly detection project for historical stock prices, with a Streamlit app, modular Python services, security-hardened authentication, and CI/CD validation workflows.
+**Intelligent Financial Analytics Platform**
 
-Live demo:
-- https://stock-anomaly-detector-tomas.streamlit.app/
+QuantVision is a production-grade FinTech analytics platform built with Python and Streamlit.
+It provides anomaly detection, technical analysis, portfolio intelligence, risk analytics,
+alerts, and strategy backtesting in a modular architecture aligned with Clean Code and SOLID practices.
 
-## Table of Contents
-- [Overview](#overview)
-- [Core Features](#core-features)
-- [Detection Methods](#detection-methods)
-- [Method Comparison](#method-comparison)
-- [Architecture Summary](#architecture-summary)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-- [Configuration](#configuration)
-- [How to Use the App](#how-to-use-the-app)
-- [Quality Snapshot](#quality-snapshot)
-- [Testing, Quality, and Security](#testing-quality-and-security)
-- [Deployment](#deployment)
-- [Notebooks and Case Studies](#notebooks-and-case-studies)
-- [Documentation Index](#documentation-index)
-- [Known Limitations](#known-limitations)
-- [Roadmap](#roadmap)
-- [Screenshots](#screenshots)
-- [Contributing](#contributing)
-- [Contact](#contact)
-- [License](#license)
+## Product Vision
+QuantVision helps analysts and investors:
+- Monitor market behavior through professional dashboards.
+- Detect outliers using statistical and machine learning models.
+- Compare assets with return, volatility, correlation, and drawdown analytics.
+- Manage portfolios, watchlists, and actionable alert workflows.
+- Evaluate strategies with a backtesting engine and benchmark against Buy & Hold.
 
-## Overview
-Stock Anomaly Detector helps identify unusual behavior in stock time series using multiple statistical and machine-learning techniques.
+## Architecture
+The project follows a modular service-driven structure:
+- `src/app.py`: Streamlit application entrypoint.
+- `src/services`: business services (auth, market data, indicators, risk, portfolio, alerts, watchlists, backtesting).
+- `src/ui`: reusable visual components and Plotly chart builders.
+- `src/config`: typed runtime settings and environment-aware configuration.
+- `src/anomaly_methods.py`: anomaly ML/statistical methods.
+- `tests`: unit, integration, smoke, and e2e suites.
 
-This repository is designed to be:
-- Portfolio-ready for recruiters and technical interviews.
-- Practical for experimentation with interchangeable methods.
-- Maintainable through tests, linting, formatting, and security checks.
+Design principles:
+- Separation of concerns and high cohesion.
+- Explicit interfaces between UI and service layers.
+- Extensible modules for new asset classes and analytics features.
 
-## Core Features
-- Interactive Streamlit UI for multi-ticker analysis.
-- Register/login flow with:
-  - bcrypt password hashing
-  - lockout policy after failed attempts
-  - expiring sessions
-  - auth audit records
-- Cached market data workflow (local CSV + Yahoo Finance fallback).
-- Side-by-side anomaly visualization and benchmark table.
-- CSV and PNG export support.
-- Organized docs, runbook, and operational workflows.
+## Core Technologies
+- Python 3.11+
+- Streamlit
+- Pandas / NumPy
+- Plotly
+- Scikit-Learn
+- Prophet
+- yfinance
+- SQLite (persisted domain state)
+- bcrypt authentication hardening
 
-## Detection Methods
-- Z-Score
-- Isolation Forest
-- DBSCAN
-- Prophet residual analysis
-- Rolling Quantile bounds
+## Feature Map
+- Authentication with secure sessions, lockout policy, and audit events.
+- Role-based access control (Admin, Analyst, Guest) with module-level gating.
+- Professional market dashboard with KPI cards and advanced charts.
+- Candlestick, volume, and multi-asset comparison visualizations.
+- Technical indicators:
+  - RSI, MACD, SMA, EMA, Bollinger Bands, VWAP, ATR, ADX,
+  - Ichimoku Cloud, OBV, Stochastic Oscillator.
+- Anomaly detection:
+  - Z-Score, Isolation Forest, DBSCAN, Prophet, Rolling Quantile,
+  - Local Outlier Factor (LOF), One-Class SVM.
+- Portfolio tracker with invested capital, current value, PnL, and ROI.
+- Watchlist management with persistent custom lists.
+- Alert rules and alert history.
+- Scheduled alert evaluation service for recurring scans.
+- Backtesting engine with trade, win-rate, drawdown, and benchmark metrics.
+- Report center with PDF, CSV, and PNG exports.
+- Risk analytics:
+  - Sharpe, Sortino, Maximum Drawdown, Volatility, Beta, Alpha, Correlation, VaR.
+- FastAPI layer for health checks and portfolio/alerts endpoints.
 
-## Method Comparison
+## Use Cases
+- Buy-side technical analysis workflow.
+- Retail portfolio monitoring and anomaly-based screening.
+- Quant experimentation and model comparison.
+- Interview-ready FinTech engineering portfolio demonstration.
 
-| Method | Strengths | Weaknesses | Best Use Case |
-|---|---|---|---|
-| Z-Score | Very fast and interpretable | Assumes distribution stability | Fast baseline checks |
-| Isolation Forest | Strong general outlier detector | Needs contamination tuning | Mixed behavior data |
-| DBSCAN | Captures density anomalies | Sensitive to eps/min_samples | Regime and cluster shifts |
-| Prophet | Trend and seasonality aware | Heavier runtime and fit cost | Structured time series |
-| Rolling Quantile | Non-parametric and robust | Window/quantile tuning needed | Extreme movement monitoring |
-
-## Architecture Summary
-The app follows a modular structure:
-- UI layer in [src/ui](src/ui)
-- Service layer in [src/services](src/services)
-- Config package in [src/config](src/config)
-- Detection algorithms in [src/anomaly_methods.py](src/anomaly_methods.py)
-- Streamlit entrypoint in [src/app.py](src/app.py)
-
-Detailed architecture documentation:
-- [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)
-
-## Project Structure
-
-```text
-src/
-  app.py
-  anomaly_methods.py
-  utils.py
-  config/
-    __init__.py
-    settings.py
-  services/
-    auth_service.py
-    market_data_service.py
-    observability.py
-  ui/
-    auth_ui.py
-    charts.py
-
-tests/
-  test_anomaly_methods.py
-  test_auth_integration.py
-  test_market_data_service.py
-  test_streamlit_smoke.py
-  test_ui_charts.py
-
-docs/
-  architecture/
-    ARCHITECTURE.md
-  guides/
-    FAQ.md
-  operations/
-    DEPLOYMENT.md
-    RUNBOOK.md
-  project/
-    CHANGELOG.md
-    CONTRIBUTING.md
-    CONTRIBUTORS.md
-
-config/
-  env/
-    .env.development.example
-    .env.production.example
-
-scripts/
-  download_all_tickers.py
-
-data/
-notebooks/
-storage/
-Taskfile.yml
-README.md
-```
-
-## Quick Start
-
-### Windows PowerShell
-
-```powershell
+## Installation
+### Local Environment
+```bash
 python -m venv .venv
+# Windows
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 streamlit run src/app.py
 ```
 
-Open:
-- http://localhost:8501
+### Docker
+```bash
+docker build -t quantvision .
+docker run -p 8501:8501 quantvision
+```
 
 ## Configuration
-Base env file:
+Main env variables:
+- `ENVIRONMENT`
+- `USERS_DB_PATH`
+- `APP_LOG_DIR`
+- `STREAMLIT_APP_URL`
+- `SESSION_TTL_MINUTES`
+- `MAX_FAILED_LOGIN_ATTEMPTS`
+- `LOCKOUT_MINUTES`
 
-```powershell
-Copy-Item .env.example .env
-```
+Reference examples:
+- `config/env/.env.development.example`
+- `config/env/.env.production.example`
 
-Environment profiles:
-- [config/env/.env.development.example](config/env/.env.development.example)
-- [config/env/.env.production.example](config/env/.env.production.example)
+## Security
+- Password hashing via bcrypt.
+- Login lockout after repeated failures.
+- Session TTL and invalidation.
+- Authentication audit trail.
 
-Main settings:
-- ENVIRONMENT (development by default, strict checks in production)
-- USERS_DB_PATH (default: storage/users.db)
-- APP_LOG_DIR (default: storage/logs)
-- SESSION_TTL_MINUTES
-- MAX_FAILED_LOGIN_ATTEMPTS
-- LOCKOUT_MINUTES
-
-Dependency reproducibility:
-- Runtime lock file: requirements/lock.txt
-- E2E browser test dependencies: requirements/e2e.txt
-- Optional notebook dependencies: requirements/notebooks.txt
-
-## How to Use the App
-1. Open the app and register or log in.
-2. Select one or more tickers and a date range.
-3. Choose detection methods and tune parameters from the sidebar.
-4. Click Load Data.
-5. Review:
-   - raw data
-   - EDA statistics
-   - anomaly chart overlays
-   - method benchmark table
-6. Export results as CSV or PNG when needed.
-
-## Quality Snapshot
-- Unit/integration tests: 39 passing in latest local validation.
-- Coverage gate: >=95% in CI.
-- CI jobs: test, quality, security, e2e-smoke.
-- Security checks: bandit + pip-audit.
-
-## Testing, Quality, and Security
-Run test suite:
-
+## Testing and Quality
 ```bash
 pytest
-```
-
-Run coverage:
-
-```bash
 pytest --cov=src --cov-report=term-missing
+ruff check src tests
+black --check src tests
 ```
 
-Run lint/format checks:
+Quality expectations:
+- High test coverage target (>=95%).
+- CI gates for tests, lint, formatting, and security scans.
 
-```bash
-ruff check src/services src/ui tests src/app.py src/config
-black --check src/services src/ui tests src/app.py src/config
-```
+## CI/CD
+GitHub Actions validates:
+- Unit/integration/smoke tests
+- Coverage threshold
+- Lint and format
+- Security checks
+- E2E smoke flow
 
-Run security checks:
+## Reports and Exports
+- Executive PDF report generation.
+- CSV export of analysis datasets.
+- PNG export of visualizations.
+- Structured analytics tables for executive and technical reporting workflows.
 
-```bash
-bandit -r src/services src/ui -ll
-pip-audit -r requirements/lock.txt
-```
+## API Layer
+FastAPI entrypoint:
+- `src/api/main.py`
 
-Run E2E Playwright smoke test (requires app URL running):
-
-```bash
-pip install -r requirements/e2e.txt
-python -m playwright install chromium
-pytest tests/e2e -q
-```
-
-Optional task runner commands (from [Taskfile.yml](Taskfile.yml)):
-
-```bash
-task test
-task quality
-task coverage
-task security
-task e2e
-task run
-task demo:bootstrap
-```
-
-Bootstrap a demo user and sample data quickly:
-
-```bash
-python scripts/bootstrap_demo.py --with-data
-```
+Current endpoints:
+- `GET /health`
+- `GET /users/{username}/role`
+- `GET /users/{username}/portfolio/summary`
+- `GET /users/{username}/alerts/history`
 
 ## Deployment
-Deployment docs:
-- [docs/operations/DEPLOYMENT.md](docs/operations/DEPLOYMENT.md)
-- [docs/operations/RUNBOOK.md](docs/operations/RUNBOOK.md)
-
-Supported flows:
-- Local Python run
-- Docker container run
-- Streamlit Community Cloud
-
-CI/CD status:
-- CI validates tests, coverage threshold, lint, format, and security scans.
-- CI also validates an end-to-end Playwright smoke test on the Streamlit app startup.
-- CD validates post-CI app health/smoke checks against deployment.
-
-## Notebooks and Case Studies
-- [notebooks/stock_anomaly_analysis.ipynb](notebooks/stock_anomaly_analysis.ipynb)
-- [notebooks/deep_learning_anomaly_case_studies.ipynb](notebooks/deep_learning_anomaly_case_studies.ipynb)
-
-These notebooks provide deeper experimentation, comparative analysis, and advanced modeling examples.
-
-## Documentation Index
-- FAQ and usage: [docs/guides/FAQ.md](docs/guides/FAQ.md)
-- Architecture: [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)
-- Deployment guide: [docs/operations/DEPLOYMENT.md](docs/operations/DEPLOYMENT.md)
-- Operations runbook: [docs/operations/RUNBOOK.md](docs/operations/RUNBOOK.md)
-- Contributing: [docs/project/CONTRIBUTING.md](docs/project/CONTRIBUTING.md)
-- Changelog: [docs/project/CHANGELOG.md](docs/project/CHANGELOG.md)
-- Contributors: [docs/project/CONTRIBUTORS.md](docs/project/CONTRIBUTORS.md)
-
-## Known Limitations
-- Uses historical price data only (no integrated sentiment/news pipeline).
-- Unsupervised anomalies do not provide absolute ground truth labels.
-- Hyperparameters are configurable but not auto-optimized.
-- Very large datasets may need additional performance tuning.
+See:
+- `docs/operations/DEPLOYMENT.md`
+- `docs/operations/RUNBOOK.md`
 
 ## Roadmap
-- Expand deep-learning methods into app runtime.
-- Add richer benchmark reporting across tickers and methods.
-- Improve observability with additional operational metrics.
-- Optionally expose a lightweight API layer.
+- PostgreSQL option for enterprise data persistence.
+- Strategy research notebook-to-production pipeline.
+- Multi-factor portfolio optimization module.
 
-## Screenshots
+## Benchmarks
+The anomaly lab includes method-level execution timing and anomaly counts,
+allowing direct benchmark comparisons across selected detection models.
 
-| Main Dashboard | EDA View | Anomaly Visualization |
-|---|---|---|
-| ![Main Dashboard](screenshots/1.png) | ![EDA](screenshots/2.png) | ![Anomaly Detection](screenshots/3.png) |
+## Application Flow
+```mermaid
+flowchart LR
+    A[Login / Session Validation] --> B[Market Data Ingestion]
+    B --> C[Indicators + Returns Engine]
+    C --> D[Anomaly Detection Lab]
+    C --> E[Risk Analytics]
+    C --> F[Portfolio & Watchlists]
+    D --> G[Alerts Engine]
+    D --> H[Backtesting Engine]
+    E --> I[Reporting / Exports]
+    F --> I
+    G --> I
+    H --> I
+```
 
-## Contributing
-Contribution guidelines:
-- [docs/project/CONTRIBUTING.md](docs/project/CONTRIBUTING.md)
-
-## Contact
-Project author: Tomas Posada
-
-For issues or collaboration:
-- Open a GitHub issue in this repository.
+## Documentation
+- `docs/architecture/ARCHITECTURE.md`
+- `docs/guides/FAQ.md`
+- `docs/operations/DEPLOYMENT.md`
+- `docs/operations/RUNBOOK.md`
 
 ## License
-MIT License.
-
-See [LICENSE](LICENSE).
+MIT. See `LICENSE`.

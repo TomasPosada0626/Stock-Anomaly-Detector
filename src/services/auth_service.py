@@ -16,6 +16,34 @@ from config import (
 )
 from services.observability import get_logger, metric
 
+ALLOWED_ROLES = {"ADMIN", "ANALYST", "GUEST"}
+MODULE_ACCESS_POLICY = {
+    "ADMIN": {
+        "Dashboard",
+        "Anomalies",
+        "Comparison",
+        "Portfolio",
+        "Watchlists",
+        "Alerts",
+        "Backtesting",
+        "Risk",
+        "Reports",
+        "Admin",
+    },
+    "ANALYST": {
+        "Dashboard",
+        "Anomalies",
+        "Comparison",
+        "Portfolio",
+        "Watchlists",
+        "Alerts",
+        "Backtesting",
+        "Risk",
+        "Reports",
+    },
+    "GUEST": {"Dashboard", "Comparison", "Risk", "Reports"},
+}
+
 
 class AuthService:
     def __init__(self, db_path: str = USERS_DB_PATH) -> None:
@@ -36,6 +64,7 @@ class AuthService:
                 email TEXT UNIQUE NOT NULL,
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'ANALYST',
                 password TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )""")
@@ -84,20 +113,37 @@ class AuthService:
                     email TEXT UNIQUE NOT NULL,
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'ANALYST',
                     password TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 )""")
             cursor.execute(
-                "INSERT INTO users (username, email, first_name, last_name, password, created_at) "
-                'SELECT username, "", "", "", password, created_at FROM users_old'
+                "INSERT INTO users (username, email, first_name, last_name, role, password, created_at) "
+                'SELECT username, "", "", "", "ANALYST", password, created_at FROM users_old'
             )
             cursor.execute("DROP TABLE users_old")
+            conn.commit()
+        conn.close()
+
+    def migrate_users_role_column(self) -> None:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if columns:
+            if "role" not in columns:
+                cursor.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'ANALYST'")
+                conn.commit()
+            cursor.execute(
+                "UPDATE users SET role='ANALYST' WHERE role IS NULL OR TRIM(role)=''"
+            )
             conn.commit()
         conn.close()
 
     def initialize(self) -> None:
         if os.path.exists(self.db_path):
             self.migrate_users_table()
+            self.migrate_users_role_column()
             self.migrate_sessions_table()
         self.create_tables()
         self.cleanup_expired_sessions()
@@ -230,12 +276,16 @@ class AuthService:
         first_name: str,
         last_name: str,
         password: str,
+        role: str = "ANALYST",
     ) -> Tuple[bool, Optional[str]]:
         username_clean = username.strip()
         email_clean = email.strip().lower()
         first_name_clean = first_name.strip()
         last_name_clean = last_name.strip()
         password_clean = password.strip()
+        role_clean = role.strip().upper() if role else "ANALYST"
+        if role_clean not in ALLOWED_ROLES:
+            role_clean = "ANALYST"
 
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -253,12 +303,13 @@ class AuthService:
                 return False, "Email is already registered. Try logging in."
 
             cursor.execute(
-                "INSERT INTO users (username, email, first_name, last_name, password, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO users (username, email, first_name, last_name, role, password, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     username_clean,
                     email_clean,
                     first_name_clean,
                     last_name_clean,
+                    role_clean,
                     self.hash_password(password_clean),
                     self._utcnow().isoformat(),
                 ),
@@ -380,6 +431,47 @@ class AuthService:
         row = cursor.fetchone()
         conn.close()
         return row[0] if row else None
+
+    def get_user_role(self, username: str) -> str:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT role FROM users WHERE username=?", (username.strip(),))
+        row = cursor.fetchone()
+        conn.close()
+        role = (row[0] if row and row[0] else "ANALYST").upper()
+        return role if role in ALLOWED_ROLES else "ANALYST"
+
+    def set_user_role(self, username: str, role: str) -> bool:
+        role_clean = role.strip().upper()
+        if role_clean not in ALLOWED_ROLES:
+            return False
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET role=? WHERE username=?", (role_clean, username.strip()))
+        updated = cursor.rowcount if cursor.rowcount is not None else 0
+        conn.commit()
+        conn.close()
+        if updated:
+            self._record_audit("role_update", username, True, f"role={role_clean}")
+        return updated > 0
+
+    def list_users(self) -> list[tuple[str, str, str]]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, email, role FROM users ORDER BY username ASC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [(str(r[0]), str(r[1]), str(r[2]).upper()) for r in rows]
+
+    def can_access_module(self, username: str, module_name: str) -> bool:
+        role = self.get_user_role(username)
+        return module_name in MODULE_ACCESS_POLICY.get(role, set())
+
+    @staticmethod
+    def modules_for_role(role: str) -> list[str]:
+        role_clean = role.strip().upper() if role else "ANALYST"
+        allowed = MODULE_ACCESS_POLICY.get(role_clean, MODULE_ACCESS_POLICY["ANALYST"])
+        return sorted(allowed)
 
     def create_session(
         self,

@@ -9,4 +9,4 @@ def test_streamlit_app_file_exists() -> None:
 
 def test_streamlit_entrypoint_contains_title() -> None:
     content = Path("src/app.py").read_text(encoding="utf-8")
-    assert 'st.title("📈 Stock Anomaly Detector")' in content
+    assert "QuantVision" in content

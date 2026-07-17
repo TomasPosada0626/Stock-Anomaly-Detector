@@ -5,7 +5,12 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from anomaly_methods import detect_anomalies_iforest, detect_anomalies_zscore
+from anomaly_methods import (
+    detect_anomalies_iforest,
+    detect_anomalies_lof,
+    detect_anomalies_one_class_svm,
+    detect_anomalies_zscore,
+)
 from utils import rolling_quantile_anomaly
 
 
@@ -60,3 +65,23 @@ def test_rolling_quantile_returns_boolean_series() -> None:
     series = pd.Series([10, 11, 12, 13, 14])
     anomalies = rolling_quantile_anomaly(series, window=2, quantile=0.9)
     assert anomalies.dtype == bool
+
+
+def test_lof_detects_outliers() -> None:
+    returns = pd.Series([0.01, 0.02, 0.02, 0.03, -0.5, 0.01, 0.02, 0.8])
+    anomalies = detect_anomalies_lof(returns, contamination=0.25, n_neighbors=3)
+    assert anomalies.sum() >= 1
+
+
+def test_one_class_svm_detects_outliers() -> None:
+    returns = pd.Series([0.01, 0.02, 0.02, 0.03, -0.5, 0.01, 0.02, 0.8])
+    anomalies = detect_anomalies_one_class_svm(returns, nu=0.25)
+    assert anomalies.sum() >= 1
+
+
+def test_lof_and_ocsvm_handle_too_small_series() -> None:
+    returns = pd.Series([0.01, 0.02])
+    lof = detect_anomalies_lof(returns, contamination=0.1, n_neighbors=5)
+    ocsvm = detect_anomalies_one_class_svm(returns, nu=0.1)
+    assert lof.sum() == 0
+    assert ocsvm.sum() == 0

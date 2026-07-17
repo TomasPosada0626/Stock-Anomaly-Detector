@@ -1,4 +1,4 @@
-# FAQ - Stock Anomaly Detector
+# FAQ - QuantVision
 
 ## General
 
@@ -33,8 +33,8 @@ Run `pytest` from repository root.
 Yes. Docker deployment is ready, and cloud deployment is documented.
 
 **What is the Docker command?**
-- Build: `docker build -t stock-anomaly-detector .`
-- Run: `docker run -p 8501:8501 stock-anomaly-detector`
+- Build: `docker build -t quantvision .`
+- Run: `docker run -p 8501:8501 quantvision`
 
 **Is there CI/CD?**
 Yes. CI validates tests/coverage/quality/security and CD runs deployment smoke checks.

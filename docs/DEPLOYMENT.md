@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This document describes how to deploy the Stock Anomaly Detector locally, with Docker, and in cloud services.
+This document describes how to deploy QuantVision locally, with Docker, and in cloud services.
 
 ## 1. Local Run (No Docker)
 
@@ -27,13 +27,13 @@ App URL: http://localhost:8501
 Build image:
 
 ```bash
-docker build -t stock-anomaly-detector .
+docker build -t quantvision .
 ```
 
 Run container:
 
 ```bash
-docker run --rm -p 8501:8501 stock-anomaly-detector
+docker run --rm -p 8501:8501 quantvision
 ```
 
 App URL: http://localhost:8501
@@ -41,7 +41,7 @@ App URL: http://localhost:8501
 Optional: mount local data directory:
 
 ```bash
-docker run --rm -p 8501:8501 -v ${PWD}/data:/app/data stock-anomaly-detector
+docker run --rm -p 8501:8501 -v ${PWD}/data:/app/data quantvision
 ```
 
 Notes:

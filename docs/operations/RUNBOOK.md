@@ -1,7 +1,7 @@
 # Operations Runbook
 
 ## Service
-- App URL: https://stock-anomaly-detector-tomas.streamlit.app/
+- App URL: https://quantvision-tomas.streamlit.app/
 - Runtime: Streamlit Cloud
 - Source branch: `main`
 

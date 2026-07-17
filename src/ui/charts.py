@@ -1,5 +1,6 @@
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 
 def _resolve_close_column(df: pd.DataFrame):
@@ -33,3 +34,52 @@ def build_anomaly_chart(df: pd.DataFrame, pts: pd.DataFrame, y_data):
         )
     fig_final.add_scatter(x=df.index, y=y_data, mode="lines", name="Price", opacity=0.3)
     return fig_final
+
+
+def build_candlestick_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
+    fig = go.Figure(
+        data=[
+            go.Candlestick(
+                x=df.index,
+                open=df["Open"],
+                high=df["High"],
+                low=df["Low"],
+                close=df["Close"],
+                name=ticker,
+            )
+        ]
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        title=f"{ticker} Candlestick",
+        xaxis_rangeslider_visible=False,
+        hovermode="x unified",
+    )
+    return fig
+
+
+def build_volume_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=df.index,
+                y=df["Volume"],
+                marker_color="#4a90e2",
+                name="Volume",
+            )
+        ]
+    )
+    fig.update_layout(
+        template="plotly_dark",
+        title=f"{ticker} Volume",
+        hovermode="x unified",
+    )
+    return fig
+
+
+def build_comparison_chart(df: pd.DataFrame, title: str) -> go.Figure:
+    fig = go.Figure()
+    for col in df.columns:
+        fig.add_trace(go.Scatter(x=df.index, y=df[col], mode="lines", name=str(col)))
+    fig.update_layout(template="plotly_dark", title=title, hovermode="x unified")
+    return fig

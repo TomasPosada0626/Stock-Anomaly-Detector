@@ -1,4 +1,4 @@
-# FAQ - Stock Anomaly Detector
+# FAQ - QuantVision
 
 ## General
 
@@ -33,8 +33,8 @@ Run `pytest tests/tests.py` from repository root.
 Yes. Docker deployment is ready, and cloud deployment is documented.
 
 **What is the Docker command?**
-- Build: `docker build -t stock-anomaly-detector .`
-- Run: `docker run -p 8501:8501 stock-anomaly-detector`
+- Build: `docker build -t quantvision .`
+- Run: `docker run -p 8501:8501 quantvision`
 
 **Is there CI/CD?**
 Not yet. Deployment is currently manual.
@@ -42,7 +42,7 @@ Not yet. Deployment is currently manual.
 ## Security and Sessions
 
 **How are passwords stored?**
-Passwords are hashed with SHA-256 before storage.
+Passwords are hashed with bcrypt before storage.
 
 **Where is user data stored?**
 In a local SQLite database file (`users.db`).

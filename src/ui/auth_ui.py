@@ -128,6 +128,7 @@ def render_login_panel(auth_service: AuthService) -> None:
                     st.session_state["logged_in"] = True
                     st.session_state["username"] = username
                     st.session_state["session_id"] = session_id
+                    st.session_state["role"] = auth_service.get_user_role(username)
                     st.success(f"Login successful! Welcome, {username}.")
                     st.rerun()
                 else:

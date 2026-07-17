@@ -453,3 +453,20 @@ def test_cleanup_expired_sessions_removes_old_rows(tmp_path) -> None:
 
     assert deleted >= 1
     assert auth.is_session_valid("old-session") is False
+
+def test_user_roles_default_update_and_policy(tmp_path) -> None:
+    db_path = tmp_path / "roles.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    auth.register_user("analyst1", "analyst1@email.com", "A", "N", "Strong*Pass1")
+    assert auth.get_user_role("analyst1") == "ANALYST"
+    assert auth.can_access_module("analyst1", "Dashboard") is True
+    assert auth.can_access_module("analyst1", "Admin") is False
+
+    updated = auth.set_user_role("analyst1", "ADMIN")
+    assert updated is True
+    assert auth.get_user_role("analyst1") == "ADMIN"
+    assert auth.can_access_module("analyst1", "Admin") is True
+
+    assert auth.set_user_role("analyst1", "INVALID") is False

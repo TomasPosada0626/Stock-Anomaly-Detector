@@ -18,7 +18,7 @@ def test_login_page_smoke() -> None:
             """
             () => {
                 const text = (document.body?.innerText || '').toLowerCase();
-                return text.includes('login') || text.includes('register') || text.includes('stock anomaly detector');
+                return text.includes('login') || text.includes('register') || text.includes('quantvision');
             }
             """,
             timeout=120000,
@@ -26,7 +26,7 @@ def test_login_page_smoke() -> None:
         content = (page.inner_text("body") or "").lower()
         browser.close()
 
-    assert "login" in content or "stock anomaly detector" in content
+    assert "login" in content or "quantvision" in content
     assert (
         "you can log in with username or email" in content
         or "username or email" in content

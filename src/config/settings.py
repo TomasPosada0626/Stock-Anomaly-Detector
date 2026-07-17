@@ -43,7 +43,7 @@ LOCKOUT_MINUTES = _positive("LOCKOUT_MINUTES", _int_env("LOCKOUT_MINUTES", 15))
 USERS_DB_PATH = _resolve_project_path(os.getenv("USERS_DB_PATH", "storage/users.db"))
 APP_LOG_DIR = _resolve_project_path(os.getenv("APP_LOG_DIR", "storage/logs"))
 STREAMLIT_APP_URL = os.getenv(
-    "STREAMLIT_APP_URL", "https://stock-anomaly-detector-tomas.streamlit.app/"
+    "STREAMLIT_APP_URL", "https://quantvision-tomas.streamlit.app/"
 )
 
 if ENVIRONMENT == "production":
