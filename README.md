@@ -21,7 +21,7 @@ QuantVision is a production-grade financial intelligence platform that combines 
 Designed following enterprise-grade software engineering practices including Clean Architecture, SOLID principles, automated testing, CI/CD pipelines, secure authentication and production deployment.
 
 ## Live Demo
-- Application URL: https://stock-anomaly-detector-tomas.streamlit.app/
+- Application URL: https://quantvision-ia.streamlit.app/
 
 ## Author
 - Tomas Posada ([GitHub](https://github.com/TomasPosada0626))
