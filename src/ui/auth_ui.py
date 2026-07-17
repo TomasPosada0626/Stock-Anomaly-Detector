@@ -36,6 +36,9 @@ def render_login_panel(auth_service: AuthService) -> None:
             "<div style='text-align:center;'><h1>Login / Register</h1></div>",
             unsafe_allow_html=True,
         )
+        if st.session_state.pop("force_login_view", False):
+            st.session_state["auth_action"] = "Login"
+
         if "auth_action" not in st.session_state:
             st.session_state["auth_action"] = "Login"
 
@@ -89,7 +92,7 @@ def render_login_panel(auth_service: AuthService) -> None:
                             "Registration successful! Please log in."
                         )
                         st.session_state["post_register_identifier"] = email.strip().lower()
-                        st.session_state["auth_action"] = "Login"
+                        st.session_state["force_login_view"] = True
                         st.session_state["logged_in"] = False
                         st.session_state["username"] = ""
                         st.rerun()
