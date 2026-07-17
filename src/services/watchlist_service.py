@@ -123,7 +123,9 @@ class WatchlistService:
         conn = self._conn()
         plain = ticker.upper()
         encrypted = (
-            encrypt_value(plain, self._encryption_key) if self._encryption_key else "__not_encrypted__"
+            encrypt_value(plain, self._encryption_key)
+            if self._encryption_key
+            else "__not_encrypted__"
         )
         conn.execute(
             "DELETE FROM watchlist_items WHERE watchlist_id = ? AND ticker = ?",
@@ -160,8 +162,10 @@ class WatchlistService:
         conn.close()
         if not df.empty and self._encryption_key:
             df["ticker"] = df["ticker"].apply(
-                lambda value: decrypt_value(value, self._encryption_key)
-                if isinstance(value, str) and value.startswith("qv_enc_v")
-                else value
+                lambda value: (
+                    decrypt_value(value, self._encryption_key)
+                    if isinstance(value, str) and value.startswith("qv_enc_v")
+                    else value
+                )
             )
         return df

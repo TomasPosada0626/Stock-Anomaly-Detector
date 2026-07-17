@@ -13,7 +13,9 @@ def test_watchlist_ticker_encrypted_at_rest(tmp_path, monkeypatch) -> None:
     service.add_ticker(watchlist_id, "AAPL")
 
     conn = sqlite3.connect(db_path)
-    row = conn.execute("SELECT ticker FROM watchlist_items WHERE watchlist_id = ?", (watchlist_id,)).fetchone()
+    row = conn.execute(
+        "SELECT ticker FROM watchlist_items WHERE watchlist_id = ?", (watchlist_id,)
+    ).fetchone()
     conn.close()
 
     assert row is not None
@@ -30,7 +32,9 @@ def test_alert_message_encrypted_at_rest(tmp_path, monkeypatch) -> None:
 
     service = AlertsService(db_path=db_path, use_sqlalchemy=False)
     rule_id = service.create_rule(
-        AlertRule(username="alice", ticker="AAPL", alert_type="rsi_gt_70", threshold=None, active=True)
+        AlertRule(
+            username="alice", ticker="AAPL", alert_type="rsi_gt_70", threshold=None, active=True
+        )
     )
     assert rule_id > 0
     service.emit_alert("alice", "AAPL", "rsi_gt_70", "RSI reached 80")

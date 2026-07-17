@@ -119,9 +119,11 @@ class AlertsService:
         conn.close()
         if not df.empty and self._encryption_key:
             df["ticker"] = df["ticker"].apply(
-                lambda value: decrypt_value(value, self._encryption_key)
-                if isinstance(value, str) and value.startswith("qv_enc_v")
-                else value
+                lambda value: (
+                    decrypt_value(value, self._encryption_key)
+                    if isinstance(value, str) and value.startswith("qv_enc_v")
+                    else value
+                )
             )
         return df
 
@@ -173,14 +175,18 @@ class AlertsService:
         conn.close()
         if not df.empty and self._encryption_key:
             df["ticker"] = df["ticker"].apply(
-                lambda value: decrypt_value(value, self._encryption_key)
-                if isinstance(value, str) and value.startswith("qv_enc_v")
-                else value
+                lambda value: (
+                    decrypt_value(value, self._encryption_key)
+                    if isinstance(value, str) and value.startswith("qv_enc_v")
+                    else value
+                )
             )
             df["message"] = df["message"].apply(
-                lambda value: decrypt_value(value, self._encryption_key)
-                if isinstance(value, str) and value.startswith("qv_enc_v")
-                else value
+                lambda value: (
+                    decrypt_value(value, self._encryption_key)
+                    if isinstance(value, str) and value.startswith("qv_enc_v")
+                    else value
+                )
             )
         return df
 

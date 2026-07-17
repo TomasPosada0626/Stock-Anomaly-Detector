@@ -26,8 +26,7 @@ class StrategyGovernanceService:
 
     def _initialize(self) -> None:
         conn = self._conn()
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS strategy_proposals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 strategy_name TEXT NOT NULL,
@@ -38,8 +37,7 @@ class StrategyGovernanceService:
                 decision_at TEXT,
                 created_at TEXT NOT NULL
             )
-            """
-        )
+            """)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_strategy_proposals_status_created_at ON strategy_proposals (status, created_at)"
         )

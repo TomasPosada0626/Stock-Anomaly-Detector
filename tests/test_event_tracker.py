@@ -16,8 +16,12 @@ def test_event_tracker_tracks_and_lists_events(tmp_path) -> None:
 def test_event_tracker_top_features_and_funnel(tmp_path) -> None:
     tracker = EventTracker(db_path=str(tmp_path / "analytics.db"))
     tracker.track(AnalyticsEvent(username="alice", feature="dashboard", event_name="login_success"))
-    tracker.track(AnalyticsEvent(username="alice", feature="dashboard", event_name="load_market_data"))
-    tracker.track(AnalyticsEvent(username="alice", feature="anomalies", event_name="run_anomaly_methods"))
+    tracker.track(
+        AnalyticsEvent(username="alice", feature="dashboard", event_name="load_market_data")
+    )
+    tracker.track(
+        AnalyticsEvent(username="alice", feature="anomalies", event_name="run_anomaly_methods")
+    )
 
     top = tracker.top_features(limit=5)
     assert not top.empty

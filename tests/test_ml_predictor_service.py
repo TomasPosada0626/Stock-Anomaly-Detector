@@ -18,5 +18,7 @@ def test_ml_predictor_detect_factor_drift() -> None:
     recent = [0.08] * 30
     series = pd.Series(base + recent)
 
-    drift = service.detect_factor_drift(series, recent_window=30, baseline_window=90, threshold_std=1.0)
+    drift = service.detect_factor_drift(
+        series, recent_window=30, baseline_window=90, threshold_std=1.0
+    )
     assert drift["drift_detected"] is True

@@ -172,7 +172,9 @@ def create_app(
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-            response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; frame-ancestors 'none'"
+            )
             return response
 
     def _route(method: str, path: str):
@@ -195,7 +197,9 @@ def create_app(
         bucket = _rate_limit_store.setdefault(subject, [])
         bucket[:] = [item for item in bucket if item.timestamp() >= threshold]
         if len(bucket) >= _RATE_LIMIT_REQUESTS:
-            raise HTTPException(status_code=429, detail="rate limit exceeded: 10 requests per minute")
+            raise HTTPException(
+                status_code=429, detail="rate limit exceeded: 10 requests per minute"
+            )
         bucket.append(now)
 
     def _require_authenticated_user(username: str, session_id: str) -> None:
@@ -280,7 +284,9 @@ def create_app(
         return frame.to_dict(orient="records")
 
     @_route("post", "/analytics/experiments/{name}/assignment")
-    def analytics_assign_experiment(name: str, payload: ExperimentAssignmentRequest) -> dict[str, str]:
+    def analytics_assign_experiment(
+        name: str, payload: ExperimentAssignmentRequest
+    ) -> dict[str, str]:
         variant = experimentation.assign_variant(name, payload.username)
         event_tracker.track(
             AnalyticsEvent(
@@ -293,7 +299,9 @@ def create_app(
         return {"experiment": name, "username": payload.username, "variant": variant}
 
     @_route("post", "/analytics/experiments/{name}/conversion")
-    def analytics_conversion_experiment(name: str, payload: ExperimentConversionRequest) -> dict[str, object]:
+    def analytics_conversion_experiment(
+        name: str, payload: ExperimentConversionRequest
+    ) -> dict[str, object]:
         experimentation.track_conversion(name, payload.username)
         event_tracker.track(
             AnalyticsEvent(
@@ -548,7 +556,9 @@ def create_app(
             raise HTTPException(status_code=404, detail="no data")
 
         prepared = add_return_features(df)
-        prediction = ml_predictor.predict_next_close(prepared["Close"], horizon=max(1, int(horizon)))
+        prediction = ml_predictor.predict_next_close(
+            prepared["Close"], horizon=max(1, int(horizon))
+        )
         drift = ml_predictor.detect_factor_drift(prepared["Return"].fillna(0.0))
         return {
             "ticker": ticker,

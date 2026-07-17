@@ -472,7 +472,9 @@ def _render_governance() -> None:
     with st.form("governance_form"):
         security_token = st.text_input("Security Token", value=_csrf_token(), type="password")
         strategy_name = st.text_input("Strategy name", value="Momentum Plus")
-        rationale = st.text_area("Rationale", value="Add anomaly filters to reduce false positives.")
+        rationale = st.text_area(
+            "Rationale", value="Add anomaly filters to reduce false positives."
+        )
         submitted = st.form_submit_button("Submit proposal")
         if submitted and not _is_valid_csrf(security_token):
             st.error("Security token mismatch. Reload and try again.")
@@ -494,10 +496,14 @@ def _render_governance() -> None:
     proposal_id = int(st.selectbox("Proposal ID", options=proposals["id"].tolist(), key="gov_id"))
     col_a, col_b = st.columns(2)
     if col_a.button("Approve"):
-        governance_service.approve_proposal(proposal_id, approved_by=st.session_state.get("username", "admin"))
+        governance_service.approve_proposal(
+            proposal_id, approved_by=st.session_state.get("username", "admin")
+        )
         st.rerun()
     if col_b.button("Reject"):
-        governance_service.reject_proposal(proposal_id, approved_by=st.session_state.get("username", "admin"))
+        governance_service.reject_proposal(
+            proposal_id, approved_by=st.session_state.get("username", "admin")
+        )
         st.rerun()
 
     st.markdown("### Webhook Dispatch")
