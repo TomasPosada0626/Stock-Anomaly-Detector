@@ -16,6 +16,8 @@ class StrategyProposal:
 
 
 class StrategyGovernanceService:
+    """Manage lifecycle of strategy proposals and approvals."""
+
     def __init__(self, db_path: str = "storage/governance.db") -> None:
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -45,6 +47,14 @@ class StrategyGovernanceService:
         conn.close()
 
     def submit_proposal(self, proposal: StrategyProposal) -> int:
+        """Persist a new strategy proposal.
+
+        Args:
+            proposal: Proposal payload.
+
+        Returns:
+            Newly created proposal id.
+        """
         strategy_name = proposal.strategy_name.strip()
         created_by = proposal.created_by.strip()
         rationale = proposal.rationale.strip()
@@ -67,11 +77,20 @@ class StrategyGovernanceService:
             ),
         )
         conn.commit()
-        row_id = int(cur.lastrowid)
+        row_id = cur.lastrowid
         conn.close()
-        return row_id
+        return int(row_id if row_id is not None else 0)
 
     def approve_proposal(self, proposal_id: int, approved_by: str) -> bool:
+        """Approve a pending proposal.
+
+        Args:
+            proposal_id: Proposal identifier.
+            approved_by: Approver username.
+
+        Returns:
+            True when one pending proposal was updated.
+        """
         approver = approved_by.strip()
         if not approver:
             raise ValueError("approved_by is required")
@@ -98,6 +117,15 @@ class StrategyGovernanceService:
         return bool(updated)
 
     def reject_proposal(self, proposal_id: int, approved_by: str) -> bool:
+        """Reject a pending proposal.
+
+        Args:
+            proposal_id: Proposal identifier.
+            approved_by: Reviewer username.
+
+        Returns:
+            True when one pending proposal was updated.
+        """
         approver = approved_by.strip()
         if not approver:
             raise ValueError("approved_by is required")
@@ -124,6 +152,15 @@ class StrategyGovernanceService:
         return bool(updated)
 
     def list_proposals(self, status: str | None = None, limit: int = 200) -> pd.DataFrame:
+        """List proposals with optional status filtering.
+
+        Args:
+            status: Optional status value.
+            limit: Maximum number of rows.
+
+        Returns:
+            Dataframe containing proposal records.
+        """
         conn = self._conn()
         if status and status.strip():
             frame = pd.read_sql_query(

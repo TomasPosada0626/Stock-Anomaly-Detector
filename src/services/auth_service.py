@@ -264,9 +264,9 @@ class AuthService:
         return cls._legacy_hash_password(password) == stored_hash
 
     @staticmethod
-    def is_strong_password(password: str):
+    def is_strong_password(password: str) -> bool:
         pattern = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$"
-        return re.match(pattern, password)
+        return bool(re.match(pattern, password))
 
     @staticmethod
     def _contains_html_payload(value: str) -> bool:
@@ -319,6 +319,7 @@ class AuthService:
             return False, "Registration contains invalid characters."
 
         conn = self.get_connection()
+        conn_closed = False
         cursor = conn.cursor()
         try:
             cursor.execute("SELECT 1 FROM users WHERE username=?", (username_clean,))
@@ -347,13 +348,12 @@ class AuthService:
             )
             conn.commit()
             conn.close()
-            conn = None
+            conn_closed = True
             self._record_audit("register", username_clean, True, "user registered")
             self.logger.info("register_success username=%s", username_clean)
             return True, None
         except sqlite3.IntegrityError as exc:
-            if hasattr(conn, "rollback"):
-                conn.rollback()
+            conn.rollback()
             # Re-check both keys to return an accurate conflict message.
             username_taken = False
             email_taken = False
@@ -367,7 +367,7 @@ class AuthService:
                 email_taken = False
 
             conn.close()
-            conn = None
+            conn_closed = True
             if username_taken:
                 self._record_audit("register", username_clean, False, "username unavailable")
                 self.logger.info("register_failed_username username=%s", username_clean)
@@ -382,7 +382,7 @@ class AuthService:
             )
             return False, "Registration failed due to a data conflict. Please try again."
         finally:
-            if conn is not None:
+            if not conn_closed:
                 conn.close()
 
     def authenticate_user_with_reason(self, user_or_email: str, password: str) -> Tuple[bool, str]:

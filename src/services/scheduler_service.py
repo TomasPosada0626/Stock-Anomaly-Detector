@@ -12,10 +12,12 @@ from services.observability import get_logger
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
 except Exception:  # pragma: no cover - optional dependency
-    BackgroundScheduler = None  # type: ignore[assignment]
+    BackgroundScheduler = None
 
 
 class AlertScheduler:
+    """Run periodic alert evaluations for one or multiple users."""
+
     def __init__(
         self, alerts_service: AlertsService, fetch_market_data: Callable[[str], pd.DataFrame]
     ) -> None:
@@ -25,6 +27,7 @@ class AlertScheduler:
         self.scheduler = BackgroundScheduler() if BackgroundScheduler else None
 
     def evaluate_alerts_once(self, username: str) -> int:
+        """Evaluate all active rules for a single user once."""
         rules = self.alerts_service.list_rules(username)
         if rules.empty:
             return 0
@@ -70,6 +73,7 @@ class AlertScheduler:
         return triggered_count
 
     def start(self, username: str, interval_minutes: int = 15) -> bool:
+        """Start APScheduler interval job for one user's alerts."""
         if not self.scheduler:
             self.logger.warning("apscheduler_unavailable")
             return False
@@ -85,6 +89,7 @@ class AlertScheduler:
         return True
 
     def evaluate_all_users_once(self) -> dict[str, int]:
+        """Evaluate alert rules for all users owning at least one rule."""
         owners = self.alerts_service.list_rule_owners()
         summary: dict[str, int] = {}
         for username in owners:
@@ -100,6 +105,7 @@ class AlertScheduler:
         cycle_hook: Callable[[int, dict[str, int]], None] | None = None,
         error_hook: Callable[[int, str], None] | None = None,
     ) -> None:
+        """Run continuous polling cycles with resilience hooks and backoff logging."""
         wait_seconds = max(1, int(interval_minutes)) * 60
         self.logger.info(
             "scheduler_continuous_started interval_seconds=%s max_cycles=%s max_consecutive_failures=%s",
@@ -149,5 +155,6 @@ class AlertScheduler:
             self.logger.info("scheduler_continuous_stopped")
 
     def stop(self) -> None:
+        """Stop scheduler thread if it is currently running."""
         if self.scheduler and self.scheduler.running:
             self.scheduler.shutdown(wait=False)

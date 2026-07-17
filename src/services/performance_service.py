@@ -7,7 +7,7 @@ from typing import Any, Callable
 import pandas as pd
 
 _executor = ThreadPoolExecutor(max_workers=2)
-_jobs: dict[str, Future] = {}
+_jobs: dict[str, Future[Any]] = {}
 _jobs_lock = Lock()
 
 
@@ -17,6 +17,7 @@ def paginate_dataframe(
     sort_by: str | None = None,
     descending: bool = True,
 ) -> pd.DataFrame:
+    """Return a sorted, size-limited dataframe view for UI rendering."""
     if df.empty:
         return df
 
@@ -26,12 +27,14 @@ def paginate_dataframe(
     return output.head(max(1, int(limit)))
 
 
-def submit_async_job(job_id: str, fn: Callable[..., Any], *args, **kwargs) -> None:
+def submit_async_job(job_id: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+    """Submit a background task keyed by a caller-provided job id."""
     with _jobs_lock:
         _jobs[job_id] = _executor.submit(fn, *args, **kwargs)
 
 
 def get_async_job_result(job_id: str) -> tuple[str, Any]:
+    """Return status and payload for an asynchronous background job."""
     with _jobs_lock:
         future = _jobs.get(job_id)
 

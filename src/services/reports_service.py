@@ -6,18 +6,45 @@ import pandas as pd
 
 
 class ReportsService:
+    """Build and export business/technical reports in multiple formats."""
+
     def to_csv_bytes(self, df: pd.DataFrame) -> bytes:
-        return df.to_csv(index=True).encode("utf-8")
+        """Serialize a dataframe into UTF-8 CSV bytes.
+
+        Args:
+            df: Source dataframe.
+
+        Returns:
+            Encoded CSV payload.
+        """
+        csv_text = str(df.to_csv(index=True))
+        return csv_text.encode("utf-8")
 
     def to_png_bytes(self, fig: Any) -> bytes:
+        """Serialize a Plotly figure to PNG bytes when supported.
+
+        Args:
+            fig: Plotly-like figure object.
+
+        Returns:
+            PNG bytes, or empty bytes when export is unavailable.
+        """
         if hasattr(fig, "to_image"):
             try:
-                return fig.to_image(format="png")
+                return bytes(fig.to_image(format="png"))
             except Exception:
                 return b""
         return b""
 
     def _minimal_pdf_from_lines(self, lines: list[str]) -> bytes:
+        """Build a minimal single-page PDF from plain text lines.
+
+        Args:
+            lines: Text lines to render in the page content stream.
+
+        Returns:
+            Binary PDF document.
+        """
         escaped_lines = []
         for line in lines:
             text = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
@@ -70,6 +97,15 @@ class ReportsService:
         return bytes(pdf)
 
     def to_pdf_bytes(self, title: str, sections: dict[str, Any]) -> bytes:
+        """Build a PDF report from a title and named sections.
+
+        Args:
+            title: Report title.
+            sections: Mapping of section names to serializable payloads.
+
+        Returns:
+            Binary PDF report.
+        """
         lines = [title, "QuantVision | Intelligent Financial Analytics Platform", ""]
         for name, payload in sections.items():
             lines.append(f"[{name}]")
@@ -87,6 +123,16 @@ class ReportsService:
     def build_executive_report(
         self, title: str, kpis: dict[str, float], benchmark: pd.DataFrame
     ) -> bytes:
+        """Build a compact executive PDF report.
+
+        Args:
+            title: Report title.
+            kpis: Executive KPI values.
+            benchmark: Benchmark dataframe preview.
+
+        Returns:
+            Binary PDF report.
+        """
         sections = {
             "Executive KPIs": {
                 k: f"{v:.4f}" if isinstance(v, (float, int)) else v for k, v in kpis.items()
@@ -101,6 +147,16 @@ class ReportsService:
         indicators_snapshot: dict[str, float],
         anomaly_table: pd.DataFrame,
     ) -> bytes:
+        """Build a technical PDF report with indicators and anomaly summary.
+
+        Args:
+            title: Report title.
+            indicators_snapshot: Indicator values to include.
+            anomaly_table: Tabular anomaly results.
+
+        Returns:
+            Binary PDF report.
+        """
         sections = {
             "Technical Indicators": {
                 k: f"{v:.4f}" if isinstance(v, (float, int)) else v
@@ -116,6 +172,16 @@ class ReportsService:
         portfolio_metrics: dict[str, float],
         positions: pd.DataFrame,
     ) -> bytes:
+        """Build a portfolio status PDF report.
+
+        Args:
+            title: Report title.
+            portfolio_metrics: Aggregated portfolio metrics.
+            positions: Open positions table.
+
+        Returns:
+            Binary PDF report.
+        """
         sections = {
             "Portfolio Metrics": {
                 k: f"{v:.4f}" if isinstance(v, (float, int)) else v
@@ -131,6 +197,16 @@ class ReportsService:
         summary_table: pd.DataFrame,
         correlation_table: pd.DataFrame,
     ) -> bytes:
+        """Build a comparative analysis PDF report.
+
+        Args:
+            title: Report title.
+            summary_table: Comparative KPI table.
+            correlation_table: Correlation matrix table.
+
+        Returns:
+            Binary PDF report.
+        """
         sections = {
             "Comparative Summary": summary_table,
             "Correlation Matrix": correlation_table,

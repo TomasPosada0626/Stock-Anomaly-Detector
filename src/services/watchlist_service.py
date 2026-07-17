@@ -5,6 +5,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -12,9 +13,11 @@ from config import USE_SQLALCHEMY_REPOSITORIES
 from security.encryption import decrypt_value, encrypt_value
 
 try:
-    from repositories.sqlalchemy_domain_repositories import SqlWatchlistRepository
+    from repositories.sqlalchemy_domain_repositories import (
+        SqlWatchlistRepository as _SqlWatchlistRepository,
+    )
 except Exception:  # pragma: no cover - optional dependency
-    SqlWatchlistRepository = None  # type: ignore[assignment]
+    _SqlWatchlistRepository = None
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,8 @@ class WatchlistInput:
 
 
 class WatchlistService:
+    """Manage user watchlists and their ticker items."""
+
     def __init__(
         self,
         db_path: str = "storage/quantvision.db",
@@ -31,11 +36,11 @@ class WatchlistService:
     ) -> None:
         self.db_path = db_path
         self._encryption_key = os.getenv("DATA_ENCRYPTION_KEY", "")
-        self._repo = None
+        self._repo: Any = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        if use_sqlalchemy and SqlWatchlistRepository is not None:
+        if use_sqlalchemy and _SqlWatchlistRepository is not None:
             try:
-                self._repo = SqlWatchlistRepository()
+                self._repo = _SqlWatchlistRepository()
             except Exception:
                 self._repo = None
         self.initialize()
@@ -44,6 +49,7 @@ class WatchlistService:
         return sqlite3.connect(self.db_path, check_same_thread=False)
 
     def initialize(self) -> None:
+        """Create storage tables when SQLAlchemy backend is not active."""
         if self._repo is not None:
             return
         conn = self._conn()
@@ -70,8 +76,9 @@ class WatchlistService:
         conn.close()
 
     def create_watchlist(self, data: WatchlistInput) -> int:
+        """Create a watchlist (or reuse existing) and return its id."""
         if self._repo is not None:
-            return self._repo.create_watchlist(username=data.username, name=data.name)
+            return int(self._repo.create_watchlist(username=data.username, name=data.name))
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
@@ -84,9 +91,12 @@ class WatchlistService:
             (data.username, data.name.strip()),
         ).fetchone()
         conn.close()
+        if row is None:
+            return 0
         return int(row[0])
 
     def delete_watchlist(self, watchlist_id: int, username: str) -> None:
+        """Delete one watchlist and its items for the given user."""
         if self._repo is not None:
             self._repo.delete_watchlist(watchlist_id=watchlist_id, username=username)
             return
@@ -102,6 +112,7 @@ class WatchlistService:
         conn.close()
 
     def add_ticker(self, watchlist_id: int, ticker: str) -> None:
+        """Add a ticker symbol to a watchlist."""
         if self._repo is not None:
             self._repo.add_ticker(watchlist_id=watchlist_id, ticker=ticker)
             return
@@ -117,6 +128,7 @@ class WatchlistService:
         conn.close()
 
     def remove_ticker(self, watchlist_id: int, ticker: str) -> None:
+        """Remove a ticker from a watchlist (plain or encrypted representation)."""
         if self._repo is not None:
             self._repo.remove_ticker(watchlist_id=watchlist_id, ticker=ticker)
             return
@@ -139,6 +151,7 @@ class WatchlistService:
         conn.close()
 
     def list_watchlists(self, username: str) -> pd.DataFrame:
+        """List all watchlists created by a user."""
         if self._repo is not None:
             return self._repo.list_watchlists(username=username)
         conn = self._conn()
@@ -151,6 +164,7 @@ class WatchlistService:
         return df
 
     def list_items(self, watchlist_id: int) -> pd.DataFrame:
+        """List ticker items associated with one watchlist id."""
         if self._repo is not None:
             return self._repo.list_items(watchlist_id=watchlist_id)
         conn = self._conn()

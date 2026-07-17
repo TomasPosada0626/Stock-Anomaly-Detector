@@ -90,7 +90,7 @@ jobs:
 
       - name: Type Check (mypy)
         run: |
-          mypy src/app.py src/anomaly_methods.py src/utils.py src/ui/pages.py --strict --show-error-codes --follow-imports=skip --disable-error-code=untyped-decorator
+          mypy src/app.py src/services src/ui src/config src/anomaly_methods.py src/utils.py --strict --show-error-codes --follow-imports=skip --disable-error-code=untyped-decorator
 
       - name: Dependency Check
         run: |

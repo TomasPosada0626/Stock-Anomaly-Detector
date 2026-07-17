@@ -2,8 +2,9 @@ import json
 import logging
 import os
 import time
+from contextlib import AbstractContextManager
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from config import APP_LOG_DIR
 
@@ -12,6 +13,8 @@ _METRICS_TIMINGS: dict[str, list[float]] = {}
 
 
 class JsonLogFormatter(logging.Formatter):
+    """Render logs as structured JSON records."""
+
     def format(self, record: logging.LogRecord) -> str:
         payload = {
             "timestamp": datetime.now(UTC).isoformat(),
@@ -25,6 +28,14 @@ class JsonLogFormatter(logging.Formatter):
 
 
 def get_logger(name: str) -> logging.Logger:
+    """Create or reuse a logger configured for JSON output.
+
+    Args:
+        name: Logger name.
+
+    Returns:
+        Configured logger instance.
+    """
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
@@ -49,30 +60,39 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def log_event(logger: logging.Logger, event: str, **fields: Any) -> None:
+    """Emit a structured event log with flattened key/value fields."""
     payload = " ".join(f"{k}={fields[k]}" for k in sorted(fields))
     logger.info("event=%s %s", event, payload)
 
 
 def metric(logger: logging.Logger, name: str, value: int = 1, **tags: Any) -> None:
+    """Track a counter metric and mirror it to logs."""
     payload = " ".join(f"{k}={tags[k]}" for k in sorted(tags))
     logger.info("metric=%s value=%s %s", name, value, payload)
     _METRICS_COUNTERS[name] = _METRICS_COUNTERS.get(name, 0) + int(value)
 
 
 def record_timing(logger: logging.Logger, name: str, duration_seconds: float, **tags: Any) -> None:
+    """Track a timing metric and mirror it to logs."""
     payload = " ".join(f"{k}={tags[k]}" for k in sorted(tags))
     logger.info("timing=%s duration_seconds=%.6f %s", name, duration_seconds, payload)
     _METRICS_TIMINGS.setdefault(name, []).append(float(duration_seconds))
 
 
-def timed(metric_name: str, logger: logging.Logger):
+def timed(metric_name: str, logger: logging.Logger) -> AbstractContextManager[object]:
+    """Return a context manager that records elapsed time for a code block."""
     start = time.perf_counter()
 
     class _TimingContext:
-        def __enter__(self):
+        def __enter__(self) -> "_TimingContext":
             return self
 
-        def __exit__(self, exc_type, exc_val, exc_tb):
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_val: BaseException | None,
+            exc_tb: object,
+        ) -> Literal[False]:
             elapsed = time.perf_counter() - start
             record_timing(logger, metric_name, elapsed)
             return False
@@ -81,6 +101,7 @@ def timed(metric_name: str, logger: logging.Logger):
 
 
 def get_metrics_snapshot() -> dict[str, Any]:
+    """Return in-memory metric counters and timing aggregates."""
     averages = {
         key: (sum(values) / len(values) if values else 0.0)
         for key, values in _METRICS_TIMINGS.items()
@@ -93,6 +114,7 @@ def get_metrics_snapshot() -> dict[str, Any]:
 
 
 def get_prometheus_metrics_text(namespace: str = "quantvision") -> str:
+    """Render in-memory metrics in Prometheus text exposition format."""
     counters = dict(_METRICS_COUNTERS)
     timings = dict(_METRICS_TIMINGS)
     lines = [
@@ -118,5 +140,6 @@ def get_prometheus_metrics_text(namespace: str = "quantvision") -> str:
 
 
 def reset_metrics() -> None:
+    """Clear all in-memory metrics (used by tests)."""
     _METRICS_COUNTERS.clear()
     _METRICS_TIMINGS.clear()

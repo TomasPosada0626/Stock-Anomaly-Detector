@@ -1,10 +1,14 @@
+from __future__ import annotations
+
+from typing import Hashable
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
-def _resolve_close_column(df: pd.DataFrame):
+def _resolve_close_column(df: pd.DataFrame) -> Hashable:
     close_col_name = "Close"
     if isinstance(df.columns, pd.MultiIndex):
         for col in df.columns:
@@ -14,17 +18,21 @@ def _resolve_close_column(df: pd.DataFrame):
     return close_col_name
 
 
-def build_price_chart(df: pd.DataFrame, ticker: str):
+def build_price_chart(df: pd.DataFrame, ticker: str) -> tuple[go.Figure, pd.Series]:
     close_col_name = _resolve_close_column(df)
     y_data = df[close_col_name]
+    if not isinstance(y_data, pd.Series):
+        y_data = pd.to_numeric(y_data.squeeze(), errors="coerce")
     if hasattr(y_data, "values") and len(y_data) == len(df.index):
         return px.line(x=df.index, y=y_data, title=f"{ticker} Closing Price"), y_data
     return px.line(df, x=df.index, y="Close", title=f"{ticker} Closing Price"), df["Close"]
 
 
-def build_anomaly_chart(df: pd.DataFrame, pts: pd.DataFrame, y_data):
+def build_anomaly_chart(df: pd.DataFrame, pts: pd.DataFrame, y_data: pd.Series) -> go.Figure:
     scatter_close_col = _resolve_close_column(pts)
     y_pts = pts[scatter_close_col]
+    if not isinstance(y_pts, pd.Series):
+        y_pts = pd.to_numeric(y_pts.squeeze(), errors="coerce")
     if hasattr(y_pts, "values") and len(y_pts) == len(pts.index):
         fig_final = px.scatter(
             x=pts.index, y=y_pts, color=pts["Method"], title="Anomalies Detected"

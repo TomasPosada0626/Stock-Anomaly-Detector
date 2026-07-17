@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -21,12 +21,15 @@ class StrategyArtifact:
 
 
 class StrategyPipelineService:
+    """Promote notebook-generated strategy artifacts into runnable manifests."""
+
     def __init__(self, output_dir: str = "storage/strategies") -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def _validate_signals(df: pd.DataFrame, buy_column: str, sell_column: str) -> None:
+        """Validate required signal dataframe schema before promotion."""
         if df.empty:
             raise ValueError("signals dataframe cannot be empty")
         if "Close" not in df.columns:
@@ -42,6 +45,18 @@ class StrategyPipelineService:
         buy_column: str = "buy_signal",
         sell_column: str = "sell_signal",
     ) -> Path:
+        """Persist a strategy manifest and associated signal CSV artifact.
+
+        Args:
+            strategy_name: Human-readable strategy name.
+            notebook_path: Source notebook file path.
+            signals_df: Frame containing close prices and signal columns.
+            buy_column: Buy signal column name.
+            sell_column: Sell signal column name.
+
+        Returns:
+            Path to the generated manifest.
+        """
         strategy_key = strategy_name.strip().lower().replace(" ", "_")
         if not strategy_key:
             raise ValueError("strategy_name must not be empty")
@@ -69,8 +84,9 @@ class StrategyPipelineService:
 
     @staticmethod
     def load_artifact(manifest_path: str | Path) -> dict[str, Any]:
+        """Load and validate a promoted strategy manifest payload."""
         path = Path(manifest_path)
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
         required = {
             "strategy_name",
             "notebook_path",
@@ -89,6 +105,7 @@ class StrategyPipelineService:
         manifest_path: str | Path,
         initial_capital: float = 10_000.0,
     ) -> dict[str, float]:
+        """Run backtesting for a previously promoted strategy artifact."""
         artifact = self.load_artifact(manifest_path)
         signals_df = pd.read_csv(artifact["signals_path"], index_col=0, parse_dates=True)
 
