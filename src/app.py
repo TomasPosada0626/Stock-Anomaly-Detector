@@ -30,6 +30,7 @@ from ui.charts import (
     build_candlestick_chart,
     build_comparison_chart,
     build_price_chart,
+    build_terminal_multiview,
     build_volume_chart,
 )
 from utils import rolling_quantile_anomaly
@@ -279,6 +280,7 @@ def _render_dashboard(market_data: dict[str, pd.DataFrame], focus_ticker: str) -
 
     st.plotly_chart(build_candlestick_chart(df, focus_ticker), width="stretch")
     st.plotly_chart(build_volume_chart(df, focus_ticker), width="stretch")
+    st.plotly_chart(build_terminal_multiview(df, focus_ticker), width="stretch")
 
 
 def _render_anomalies(

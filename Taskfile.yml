@@ -45,7 +45,12 @@ tasks:
   smoke:cd:
     desc: Local smoke check against deployed app URL
     cmds:
-      - powershell -NoProfile -Command "$url='https://stock-anomaly-detector-tomas.streamlit.app/'; $response=Invoke-WebRequest -Uri $url -UseBasicParsing; if ($response.StatusCode -ne 200) { throw 'HTTP check failed' }; if ($response.Content -notmatch 'Stock Anomaly Detector|streamlit') { throw 'Content check failed' }; Write-Host 'Smoke check passed'"
+      - powershell -NoProfile -Command "$url='https://quantvision-tomas.streamlit.app/'; $response=Invoke-WebRequest -Uri $url -UseBasicParsing; if ($response.StatusCode -ne 200) { throw 'HTTP check failed' }; if ($response.Content -notmatch 'QuantVision|streamlit') { throw 'Content check failed' }; Write-Host 'Smoke check passed'"
+
+  scheduler:run:
+    desc: Run scheduled alert evaluator
+    cmds:
+      - ./.venv/Scripts/python scripts/run_scheduler.py
 
   data:download:
     desc: Download all ticker csv files

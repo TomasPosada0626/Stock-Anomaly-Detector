@@ -42,6 +42,10 @@ MAX_FAILED_LOGIN_ATTEMPTS = _positive(
 LOCKOUT_MINUTES = _positive("LOCKOUT_MINUTES", _int_env("LOCKOUT_MINUTES", 15))
 USERS_DB_PATH = _resolve_project_path(os.getenv("USERS_DB_PATH", "storage/users.db"))
 APP_LOG_DIR = _resolve_project_path(os.getenv("APP_LOG_DIR", "storage/logs"))
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{_resolve_project_path('storage/quantvision.db')}")
+SCHEDULER_INTERVAL_MINUTES = _positive(
+    "SCHEDULER_INTERVAL_MINUTES", _int_env("SCHEDULER_INTERVAL_MINUTES", 15)
+)
 STREAMLIT_APP_URL = os.getenv(
     "STREAMLIT_APP_URL", "https://quantvision-tomas.streamlit.app/"
 )
@@ -49,4 +53,5 @@ STREAMLIT_APP_URL = os.getenv(
 if ENVIRONMENT == "production":
     USERS_DB_PATH = _resolve_project_path(_required_env("USERS_DB_PATH"))
     APP_LOG_DIR = _resolve_project_path(_required_env("APP_LOG_DIR"))
+    DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{USERS_DB_PATH}")
     STREAMLIT_APP_URL = _required_env("STREAMLIT_APP_URL")

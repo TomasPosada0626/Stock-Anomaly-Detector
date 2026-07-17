@@ -90,3 +90,45 @@ class ReportsService:
             "Model Benchmark": benchmark,
         }
         return self.to_pdf_bytes(title=title, sections=sections)
+
+    def build_technical_report(
+        self,
+        title: str,
+        indicators_snapshot: dict[str, float],
+        anomaly_table: pd.DataFrame,
+    ) -> bytes:
+        sections = {
+            "Technical Indicators": {
+                k: f"{v:.4f}" if isinstance(v, (float, int)) else v
+                for k, v in indicators_snapshot.items()
+            },
+            "Anomaly Summary": anomaly_table,
+        }
+        return self.to_pdf_bytes(title=title, sections=sections)
+
+    def build_portfolio_report(
+        self,
+        title: str,
+        portfolio_metrics: dict[str, float],
+        positions: pd.DataFrame,
+    ) -> bytes:
+        sections = {
+            "Portfolio Metrics": {
+                k: f"{v:.4f}" if isinstance(v, (float, int)) else v
+                for k, v in portfolio_metrics.items()
+            },
+            "Open Positions": positions,
+        }
+        return self.to_pdf_bytes(title=title, sections=sections)
+
+    def build_comparative_report(
+        self,
+        title: str,
+        summary_table: pd.DataFrame,
+        correlation_table: pd.DataFrame,
+    ) -> bytes:
+        sections = {
+            "Comparative Summary": summary_table,
+            "Correlation Matrix": correlation_table,
+        }
+        return self.to_pdf_bytes(title=title, sections=sections)

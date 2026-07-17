@@ -1,4 +1,4 @@
-# Professional Dockerfile for Stock Anomaly Detector
+# Professional Dockerfile for QuantVision
 FROM python:3.11-slim
 
 # Set working directory

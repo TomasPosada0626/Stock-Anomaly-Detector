@@ -1,6 +1,6 @@
-import pandas as pd
-import yfinance as yf
 import os
+
+import yfinance as yf
 
 popular_tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "JPM", "V", "DIS"]
 start = "2016-01-01"

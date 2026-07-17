@@ -12,6 +12,7 @@ from ui.charts import (
     build_candlestick_chart,
     build_comparison_chart,
     build_price_chart,
+    build_terminal_multiview,
     build_volume_chart,
 )
 
@@ -112,3 +113,20 @@ def test_build_comparison_chart_has_one_trace_per_column() -> None:
     df = pd.DataFrame({"AAPL": [10, 11, 12], "MSFT": [20, 21, 22]}, index=idx)
     fig = build_comparison_chart(df, "Comparison")
     assert len(fig.data) == 2
+
+
+def test_build_terminal_multiview_contains_expected_traces() -> None:
+    idx = pd.date_range("2025-01-01", periods=5, freq="D")
+    df = pd.DataFrame(
+        {
+            "Open": [10, 11, 12, 13, 14],
+            "High": [11, 12, 13, 14, 15],
+            "Low": [9, 10, 11, 12, 13],
+            "Close": [10.5, 11.5, 12.5, 13.5, 14.5],
+            "Volume": [1000, 1200, 1300, 1250, 1400],
+            "RSI_14": [45, 48, 52, 55, 60],
+        },
+        index=idx,
+    )
+    fig = build_terminal_multiview(df, "AAPL")
+    assert len(fig.data) >= 3

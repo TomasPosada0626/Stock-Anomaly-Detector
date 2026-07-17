@@ -46,3 +46,26 @@ def test_reports_service_fallback_and_executive_builder() -> None:
 
     custom_pdf = svc.to_pdf_bytes("Custom", {"Narrative": "ok", "Data": benchmark})
     assert custom_pdf.startswith(b"%PDF")
+
+
+def test_reports_service_other_templates() -> None:
+    svc = ReportsService()
+    summary = pd.DataFrame([{"Ticker": "AAPL", "Return %": 12.5}])
+    corr = pd.DataFrame([[1.0]], columns=["AAPL"], index=["AAPL"])
+    portfolio_positions = pd.DataFrame([{"ticker": "AAPL", "quantity": 10, "buy_price": 100}])
+
+    technical = svc.build_technical_report(
+        "Technical",
+        indicators_snapshot={"RSI": 45.2, "MACD": 0.12},
+        anomaly_table=summary,
+    )
+    portfolio = svc.build_portfolio_report(
+        "Portfolio",
+        portfolio_metrics={"ROI %": 12.5},
+        positions=portfolio_positions,
+    )
+    comparative = svc.build_comparative_report("Comparative", summary, corr)
+
+    assert technical.startswith(b"%PDF")
+    assert portfolio.startswith(b"%PDF")
+    assert comparative.startswith(b"%PDF")

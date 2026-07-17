@@ -5,8 +5,8 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from services.alerts_service import AlertRule, AlertsService
 import services.scheduler_service as scheduler_module
+from services.alerts_service import AlertRule, AlertsService
 from services.scheduler_service import AlertScheduler
 
 
@@ -80,3 +80,10 @@ def test_scheduler_multiple_rule_types_and_start_stop(monkeypatch, tmp_path) -> 
     assert scheduler.scheduler.running is True
     scheduler.stop()
     assert scheduler.scheduler.running is False
+
+
+def test_scheduler_start_returns_false_when_dependency_missing(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(scheduler_module, "BackgroundScheduler", None)
+    alerts = AlertsService(db_path=str(tmp_path / "qv.db"))
+    scheduler = AlertScheduler(alerts, fetch_market_data=lambda _: pd.DataFrame())
+    assert scheduler.start("alice", interval_minutes=5) is False
