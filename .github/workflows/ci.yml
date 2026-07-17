@@ -7,10 +7,13 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -46,18 +49,18 @@ jobs:
           path: coverage.xml
 
       - name: Upload to Codecov
-        if: matrix.python-version == '3.11' && secrets.CODECOV_TOKEN != ''
+        if: matrix.python-version == '3.11' && env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v4
         with:
           files: coverage.xml
           codecov_yml_path: codecov.yml
           flags: unittests
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           verbose: true
           fail_ci_if_error: true
 
       - name: Skip Codecov (missing token)
-        if: matrix.python-version == '3.11' && secrets.CODECOV_TOKEN == ''
+        if: matrix.python-version == '3.11' && env.CODECOV_TOKEN == ''
         run: echo "Skipping Codecov upload because CODECOV_TOKEN is not configured."
 
   quality:
@@ -86,10 +89,6 @@ jobs:
           black --check src/services src/ui src/config src/api src/repositories scripts tests src/app.py
 
       - name: Type Check (mypy)
-        run: |
-          mypy src/app.py src/anomaly_methods.py src/utils.py src/ui/pages.py --strict --show-error-codes --follow-imports=skip --disable-error-code=untyped-decorator
-
-      - name: Type Check (mypy strict)
         run: |
           mypy src/app.py src/anomaly_methods.py src/utils.py src/ui/pages.py --strict --show-error-codes --follow-imports=skip --disable-error-code=untyped-decorator
 
