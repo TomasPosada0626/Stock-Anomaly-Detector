@@ -1,0 +1,57 @@
+{
+  "title": "QuantVision Observability",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Anomalies Detected",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "quantvision_counter_total{metric=\"anomalies_detected_total\"}",
+          "legendFormat": "Anomalies"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "id": 2,
+      "title": "Trades Executed",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "quantvision_counter_total{metric=\"trades_executed_total\"}",
+          "legendFormat": "Trades"
+        }
+      ],
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "id": 3,
+      "title": "Scheduler Failures",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "quantvision_counter_total{metric=\"scheduler_failures_total\"}",
+          "legendFormat": "Failures"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}
+    },
+    {
+      "id": 4,
+      "title": "Anomaly Runtime Average",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "quantvision_timing_avg_seconds{metric=\"anomaly_method_runtime_seconds\"}",
+          "legendFormat": "Runtime Avg"
+        }
+      ],
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}
+    }
+  ]
+}

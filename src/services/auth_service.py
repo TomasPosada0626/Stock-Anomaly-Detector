@@ -21,6 +21,9 @@ MODULE_ACCESS_POLICY = {
     "ADMIN": {
         "Dashboard",
         "Anomalies",
+        "AI Lab",
+        "Governance",
+        "Analytics",
         "Comparison",
         "Portfolio",
         "Watchlists",
@@ -33,6 +36,9 @@ MODULE_ACCESS_POLICY = {
     "ANALYST": {
         "Dashboard",
         "Anomalies",
+        "AI Lab",
+        "Governance",
+        "Analytics",
         "Comparison",
         "Portfolio",
         "Watchlists",
@@ -41,7 +47,7 @@ MODULE_ACCESS_POLICY = {
         "Risk",
         "Reports",
     },
-    "GUEST": {"Dashboard", "Comparison", "Risk", "Reports"},
+    "GUEST": {"Dashboard", "Comparison", "Risk", "Reports", "Analytics"},
 }
 
 

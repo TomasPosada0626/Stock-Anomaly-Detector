@@ -49,3 +49,30 @@ def test_ensure_domain_schema_is_idempotent(tmp_path) -> None:
         assert first == second == migrations.LATEST_SCHEMA_VERSION
     finally:
         engine.dispose()
+
+
+@pytest.mark.skipif(migrations.text is None, reason="SQLAlchemy not installed")
+def test_migration_v2_indexes_and_explain_query_plan(tmp_path) -> None:
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'migrations_indexes.db'}", future=True)
+    try:
+        version = migrations.ensure_domain_schema(engine)
+        assert version >= 2
+
+        with engine.begin() as conn:
+            idx_row = conn.execute(
+                text(
+                    "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_alert_history_user_triggered_at'"
+                )
+            ).first()
+
+        assert idx_row is not None
+
+        plan = migrations.explain_query_plan(
+            engine,
+            "SELECT * FROM alert_history WHERE username = 'alice' ORDER BY triggered_at DESC",
+        )
+        assert isinstance(plan, list)
+    finally:
+        engine.dispose()

@@ -22,7 +22,7 @@ streamlit run src/app.py
 
 App URL: http://localhost:8501
 
-## 2. Docker
+## 2. Docker (Single Container)
 
 Build image:
 
@@ -48,7 +48,37 @@ Notes:
 - On Windows PowerShell, `${PWD}` works for the current directory.
 - The Docker entrypoint is already configured in Dockerfile: `streamlit run src/app.py`.
 
-## 3. Streamlit Community Cloud
+## 3. Docker Compose (Recommended Local Stack)
+
+This repository includes `docker-compose.yml` with:
+- Streamlit UI
+- FastAPI API
+- Scheduler worker
+- PostgreSQL
+- Redis
+
+Start everything:
+
+```bash
+docker compose up --build
+```
+
+Stop and clean:
+
+```bash
+docker compose down
+```
+
+Endpoints:
+- UI: http://localhost:8501
+- API docs: http://localhost:8000/docs
+
+Database credentials (local default):
+- User: `quantvision`
+- Password: `quantvision`
+- DB: `quantvision`
+
+## 4. Streamlit Community Cloud
 
 1. Push repository to GitHub.
 2. Go to Streamlit Community Cloud.
@@ -61,7 +91,7 @@ Important:
 - Deep-learning notebook dependencies are optional in `requirements/notebooks.txt` and should not be required for cloud app startup.
 - This repository pins cloud Python runtime in `runtime.txt`.
 
-## 4. Generic Cloud (Docker-based)
+## 5. Generic Cloud (Docker-based)
 
 Any provider that runs containers (Azure, GCP, AWS, Render, Railway, Fly.io) can run this app.
 
@@ -70,7 +100,7 @@ Requirements:
 - Expose/route port 8501.
 - Keep environment variable `STREAMLIT_SERVER_HEADLESS=true`.
 
-## 5. Health and Runtime Checks
+## 6. Health and Runtime Checks
 
 After deployment:
 1. Open app URL.
@@ -87,7 +117,7 @@ Persistence behavior:
 - `USE_SQLALCHEMY_REPOSITORIES=false` keeps SQLite-native service repositories.
 - `USE_SQLALCHEMY_REPOSITORIES=true` enables SQLAlchemy repositories and uses `DATABASE_URL`.
 
-## 6. Current Deployment Status in This Repository
+## 7. Current Deployment Status in This Repository
 
 Implemented:
 - Dockerfile for containerized deployment.
@@ -100,7 +130,7 @@ Not yet implemented:
 - IaC templates (Terraform/Bicep/CloudFormation).
 - Provider-specific manifest files.
 
-## 7. Recommended Environment Variables
+## 8. Recommended Environment Variables
 
 - `SCHEDULER_INTERVAL_MINUTES=15`
 - `SCHEDULER_RUN_CONTINUOUS=true`

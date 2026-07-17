@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -8,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from config import USE_SQLALCHEMY_REPOSITORIES
+from security.encryption import decrypt_value, encrypt_value
 
 try:
     from repositories.sqlalchemy_domain_repositories import SqlAlertsRepository
@@ -31,6 +33,7 @@ class AlertsService:
         use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES,
     ) -> None:
         self.db_path = db_path
+        self._encryption_key = os.getenv("DATA_ENCRYPTION_KEY", "")
         self._repo = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         if use_sqlalchemy and SqlAlertsRepository is not None:
@@ -80,6 +83,9 @@ class AlertsService:
                 threshold=rule.threshold,
                 active=rule.active,
             )
+        stored_ticker = rule.ticker.upper()
+        if self._encryption_key:
+            stored_ticker = encrypt_value(stored_ticker, self._encryption_key)
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
@@ -89,7 +95,7 @@ class AlertsService:
             """,
             (
                 rule.username,
-                rule.ticker.upper(),
+                stored_ticker,
                 rule.alert_type,
                 rule.threshold,
                 int(rule.active),
@@ -111,6 +117,12 @@ class AlertsService:
             params=(username,),
         )
         conn.close()
+        if not df.empty and self._encryption_key:
+            df["ticker"] = df["ticker"].apply(
+                lambda value: decrypt_value(value, self._encryption_key)
+                if isinstance(value, str) and value.startswith("qv_enc_v")
+                else value
+            )
         return df
 
     def delete_rule(self, rule_id: int, username: str) -> None:
@@ -130,6 +142,11 @@ class AlertsService:
                 alert_type=alert_type,
                 message=message,
             )
+        stored_ticker = ticker.upper()
+        stored_message = message
+        if self._encryption_key:
+            stored_ticker = encrypt_value(stored_ticker, self._encryption_key)
+            stored_message = encrypt_value(stored_message, self._encryption_key)
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
@@ -137,7 +154,7 @@ class AlertsService:
             INSERT INTO alert_history (username, ticker, alert_type, message, triggered_at)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (username, ticker.upper(), alert_type, message, datetime.now(UTC).isoformat()),
+            (username, stored_ticker, alert_type, stored_message, datetime.now(UTC).isoformat()),
         )
         conn.commit()
         row_id = int(cur.lastrowid)
@@ -154,6 +171,17 @@ class AlertsService:
             params=(username, int(limit)),
         )
         conn.close()
+        if not df.empty and self._encryption_key:
+            df["ticker"] = df["ticker"].apply(
+                lambda value: decrypt_value(value, self._encryption_key)
+                if isinstance(value, str) and value.startswith("qv_enc_v")
+                else value
+            )
+            df["message"] = df["message"].apply(
+                lambda value: decrypt_value(value, self._encryption_key)
+                if isinstance(value, str) and value.startswith("qv_enc_v")
+                else value
+            )
         return df
 
     def list_rule_owners(self) -> list[str]:

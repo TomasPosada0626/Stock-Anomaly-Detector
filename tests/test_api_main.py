@@ -289,6 +289,46 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
     metrics = app.routes["/metrics"]()
     assert "counters" in metrics
 
+    prom = app.routes["/metrics/prometheus"]()
+    assert isinstance(prom, str)
+    assert "quantvision_counter_total" in prom
+
+    usage = app.routes["/analytics/usage/summary"](limit=5)
+    assert "funnel" in usage
+    assert "top_features" in usage
+
+    exp_payload = type(
+        "ExperimentPayload",
+        (),
+        {
+            "name": "cta_experiment",
+            "feature": "dashboard",
+            "variants": ["control", "treatment"],
+            "hypothesis": "Treatment improves click-through",
+        },
+    )()
+    created_experiment = app.routes["POST /analytics/experiments"](payload=exp_payload)
+    assert created_experiment["status"] == "created"
+
+    experiments = app.routes["/analytics/experiments"]()
+    assert any(item["name"] == "cta_experiment" for item in experiments)
+
+    assignment_payload = type("AssignmentPayload", (), {"username": "alice"})()
+    assignment = app.routes["POST /analytics/experiments/{name}/assignment"](
+        "cta_experiment", payload=assignment_payload
+    )
+    assert assignment["variant"] in {"control", "treatment"}
+
+    conversion_payload = type("ConversionPayload", (), {"username": "alice"})()
+    conversion = app.routes["POST /analytics/experiments/{name}/conversion"](
+        "cta_experiment", payload=conversion_payload
+    )
+    assert conversion["converted"] is True
+
+    experiment_summary = app.routes["/analytics/experiments/{name}/summary"]("cta_experiment")
+    assert isinstance(experiment_summary, list)
+    assert len(experiment_summary) >= 1
+
     detailed = app.routes["/health/detailed"]()
     assert "status" in detailed
 

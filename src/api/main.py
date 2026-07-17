@@ -1,20 +1,27 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Dict
 
 import pandas as pd
 
+from analytics.event_tracker import AnalyticsEvent, EventTracker
+from analytics.experimentation import ExperimentationService
 from anomaly_methods import detect_anomalies_iforest, detect_anomalies_zscore
+from integrations.webhooks import WebhookNotifier, WebhookPayload
+from observability.tracing import initialize_tracing
+from security.input_validation import require_ticker_whitelist, sanitize_ticker
 from services.alerts_service import AlertRule, AlertsService
 from services.auth_service import AuthService
 from services.backtesting_service import BacktestingService, StrategyRules
 from services.health_service import HealthService
 from services.indicators_service import add_indicators
 from services.market_data_service import add_return_features, get_ticker_data
-from services.observability import get_metrics_snapshot
+from services.ml_predictor_service import MLPredictorService
+from services.observability import get_metrics_snapshot, get_prometheus_metrics_text
 from services.portfolio_service import PortfolioService, PositionInput
 from services.reports_service import ReportsService
+from services.strategy_governance_service import StrategyGovernanceService, StrategyProposal
 from services.watchlist_service import WatchlistInput, WatchlistService
 
 try:
@@ -31,6 +38,11 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     FastAPI = None  # type: ignore[assignment]
     HTTPException = Exception  # type: ignore[assignment]
+
+
+_RATE_LIMIT_WINDOW_SECONDS = 60
+_RATE_LIMIT_REQUESTS = 10
+_rate_limit_store: dict[str, list[datetime]] = {}
 
 
 def parse_prices(raw: str) -> Dict[str, float]:
@@ -76,6 +88,38 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+class GovernanceProposalCreate(BaseModel):
+    strategy_name: str = Field(min_length=1, max_length=120)
+    created_by: str = Field(min_length=1, max_length=120)
+    rationale: str = Field(min_length=5, max_length=1000)
+
+
+class GovernanceDecisionRequest(BaseModel):
+    approved_by: str = Field(min_length=1, max_length=120)
+
+
+class WebhookDispatchRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=500)
+    event: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=2000)
+    source: str = Field(default="quantvision", min_length=1, max_length=120)
+
+
+class ExperimentCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    feature: str = Field(min_length=1, max_length=120)
+    variants: list[str]
+    hypothesis: str = Field(min_length=5, max_length=2000)
+
+
+class ExperimentAssignmentRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=120)
+
+
+class ExperimentConversionRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=120)
+
+
 def create_app(
     auth_service: AuthService | None = None,
     portfolio_service: PortfolioService | None = None,
@@ -96,8 +140,40 @@ def create_app(
     reports = reports_service or ReportsService()
     backtesting = backtesting_service or BacktestingService()
     health_service = HealthService()
+    event_tracker = EventTracker()
+    experimentation = ExperimentationService()
+    governance = StrategyGovernanceService()
+    ml_predictor = MLPredictorService()
+    webhook_notifier = WebhookNotifier()
+    initialize_tracing(service_name="quantvision-api")
+    allowed_tickers = {
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "TSLA",
+        "META",
+        "NVDA",
+        "JPM",
+        "V",
+        "DIS",
+    }
 
     app = FastAPI(title="QuantVision API", version="1.0.0")
+
+    middleware = getattr(app, "middleware", None)
+    enable_rate_limit = callable(middleware)
+    if callable(middleware):
+
+        @app.middleware("http")
+        async def _security_headers_middleware(request, call_next):
+            response = await call_next(request)
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'"
+            return response
 
     def _route(method: str, path: str):
         decorator = getattr(app, method, None)
@@ -111,7 +187,19 @@ def create_app(
                 status_code=403, detail=f"forbidden: role cannot access {module_name}"
             )
 
+    def _enforce_rate_limit(subject: str) -> None:
+        if not enable_rate_limit:
+            return
+        now = datetime.now(UTC)
+        threshold = now.timestamp() - _RATE_LIMIT_WINDOW_SECONDS
+        bucket = _rate_limit_store.setdefault(subject, [])
+        bucket[:] = [item for item in bucket if item.timestamp() >= threshold]
+        if len(bucket) >= _RATE_LIMIT_REQUESTS:
+            raise HTTPException(status_code=429, detail="rate limit exceeded: 10 requests per minute")
+        bucket.append(now)
+
     def _require_authenticated_user(username: str, session_id: str) -> None:
+        _enforce_rate_limit(f"user:{username}")
         validate_session_owner = getattr(auth, "validate_session_owner", None)
         if callable(validate_session_owner):
             if not validate_session_owner(session_id, username):
@@ -121,6 +209,7 @@ def create_app(
 
     @_route("post", "/auth/login")
     def login(payload: LoginRequest):
+        _enforce_rate_limit(f"login:{payload.identifier.strip().lower()}")
         success, reason = auth.authenticate_user_with_reason(payload.identifier, payload.password)
         if not success:
             raise HTTPException(status_code=401, detail=reason or "invalid credentials")
@@ -130,6 +219,14 @@ def create_app(
             raise HTTPException(status_code=401, detail="invalid credentials")
 
         session_id = auth.create_session(username)
+        event_tracker.track(
+            AnalyticsEvent(
+                username=username,
+                feature="auth",
+                event_name="login_success",
+                metadata="api_login",
+            )
+        )
         return {
             "username": username,
             "role": auth.get_user_role(username),
@@ -154,6 +251,64 @@ def create_app(
     @_route("get", "/metrics")
     def metrics_snapshot() -> dict[str, object]:
         return get_metrics_snapshot()
+
+    @_route("get", "/metrics/prometheus")
+    def metrics_prometheus() -> str:
+        return get_prometheus_metrics_text()
+
+    @_route("get", "/analytics/usage/summary")
+    def analytics_usage_summary(limit: int = 10) -> dict[str, object]:
+        top_features = event_tracker.top_features(limit=max(1, int(limit)))
+        return {
+            "top_features": top_features.to_dict(orient="records"),
+            "funnel": event_tracker.funnel(),
+        }
+
+    @_route("post", "/analytics/experiments")
+    def analytics_create_experiment(payload: ExperimentCreateRequest) -> dict[str, str]:
+        experimentation.create_experiment(
+            name=payload.name,
+            feature=payload.feature,
+            variants=payload.variants,
+            hypothesis=payload.hypothesis,
+        )
+        return {"name": payload.name, "status": "created"}
+
+    @_route("get", "/analytics/experiments")
+    def analytics_list_experiments(status: str = "") -> list[dict[str, object]]:
+        frame = experimentation.list_experiments(status=status or None)
+        return frame.to_dict(orient="records")
+
+    @_route("post", "/analytics/experiments/{name}/assignment")
+    def analytics_assign_experiment(name: str, payload: ExperimentAssignmentRequest) -> dict[str, str]:
+        variant = experimentation.assign_variant(name, payload.username)
+        event_tracker.track(
+            AnalyticsEvent(
+                username=payload.username,
+                feature="experimentation",
+                event_name="ab_exposure",
+                metadata=f"experiment={name};variant={variant}",
+            )
+        )
+        return {"experiment": name, "username": payload.username, "variant": variant}
+
+    @_route("post", "/analytics/experiments/{name}/conversion")
+    def analytics_conversion_experiment(name: str, payload: ExperimentConversionRequest) -> dict[str, object]:
+        experimentation.track_conversion(name, payload.username)
+        event_tracker.track(
+            AnalyticsEvent(
+                username=payload.username,
+                feature="experimentation",
+                event_name="ab_conversion",
+                metadata=f"experiment={name}",
+            )
+        )
+        return {"experiment": name, "username": payload.username, "converted": True}
+
+    @_route("get", "/analytics/experiments/{name}/summary")
+    def analytics_experiment_summary(name: str) -> list[dict[str, object]]:
+        frame = experimentation.summary(name)
+        return frame.to_dict(orient="records")
 
     @_route("get", "/users/{username}/role")
     def user_role(username: str, session_id: str = "") -> dict[str, str]:
@@ -220,10 +375,11 @@ def create_app(
     def alerts_rules_create(username: str, payload: AlertRuleCreate, session_id: str = ""):
         _require_authenticated_user(username, session_id)
         _authorize_module(username, "Alerts")
+        normalized_ticker = require_ticker_whitelist(payload.ticker, allowed=allowed_tickers)
         rule_id = alerts.create_rule(
             AlertRule(
                 username=username,
-                ticker=payload.ticker,
+                ticker=normalized_ticker,
                 alert_type=payload.alert_type,
                 threshold=payload.threshold,
                 active=payload.active,
@@ -283,8 +439,12 @@ def create_app(
         existing = watchlists.list_watchlists(username)
         if watchlist_id not in existing.get("id", pd.Series(dtype=int)).tolist():
             raise HTTPException(status_code=404, detail="watchlist not found")
-        watchlists.add_ticker(watchlist_id=watchlist_id, ticker=payload.ticker)
-        return {"added": True, "ticker": payload.ticker.upper()}
+        try:
+            ticker = require_ticker_whitelist(payload.ticker, allowed=allowed_tickers)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        watchlists.add_ticker(watchlist_id=watchlist_id, ticker=ticker)
+        return {"added": True, "ticker": ticker}
 
     @_route("delete", "/users/{username}/watchlists/{watchlist_id}/items/{ticker}")
     def user_watchlist_items_delete(
@@ -300,15 +460,19 @@ def create_app(
 
     @_route("get", "/analytics/{ticker}/indicators")
     def ticker_indicators(ticker: str, start: str = "2019-01-01", end: str = ""):
+        try:
+            ticker = require_ticker_whitelist(ticker, allowed=allowed_tickers)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         end_date = end or datetime.today().strftime("%Y-%m-%d")
-        df, _, warning = get_ticker_data(ticker=ticker.upper(), start_date=start, end_date=end_date)
+        df, _, warning = get_ticker_data(ticker=ticker, start_date=start, end_date=end_date)
         if warning:
             raise HTTPException(status_code=404, detail=warning)
         if df.empty:
             raise HTTPException(status_code=404, detail="no data")
         prepared = add_indicators(add_return_features(df))
         latest = prepared.iloc[-1].to_dict()
-        return {"ticker": ticker.upper(), "indicators": latest}
+        return {"ticker": ticker, "indicators": latest}
 
     @_route("get", "/analytics/{ticker}/anomalies")
     def ticker_anomalies(
@@ -318,8 +482,12 @@ def create_app(
         zscore_threshold: float = 3.0,
         contamination: float = 0.01,
     ):
+        try:
+            ticker = require_ticker_whitelist(ticker, allowed=allowed_tickers)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         end_date = end or datetime.today().strftime("%Y-%m-%d")
-        df, _, warning = get_ticker_data(ticker=ticker.upper(), start_date=start, end_date=end_date)
+        df, _, warning = get_ticker_data(ticker=ticker, start_date=start, end_date=end_date)
         if warning:
             raise HTTPException(status_code=404, detail=warning)
         if df.empty:
@@ -327,16 +495,28 @@ def create_app(
         prepared = add_return_features(df)
         z_mask = detect_anomalies_zscore(prepared["Return"], threshold=zscore_threshold)
         i_mask = detect_anomalies_iforest(prepared["Return"], contamination=contamination)
+        event_tracker.track(
+            AnalyticsEvent(
+                username="anonymous",
+                feature="anomalies",
+                event_name="run_anomaly_methods",
+                metadata=f"ticker={ticker}",
+            )
+        )
         return {
-            "ticker": ticker.upper(),
+            "ticker": ticker,
             "zscore_count": int(z_mask.sum()),
             "iforest_count": int(i_mask.sum()),
         }
 
     @_route("get", "/analytics/{ticker}/backtest")
     def ticker_backtest(ticker: str, start: str = "2019-01-01", end: str = ""):
+        try:
+            ticker = sanitize_ticker(ticker)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         end_date = end or datetime.today().strftime("%Y-%m-%d")
-        df, _, warning = get_ticker_data(ticker=ticker.upper(), start_date=start, end_date=end_date)
+        df, _, warning = get_ticker_data(ticker=ticker, start_date=start, end_date=end_date)
         if warning:
             raise HTTPException(status_code=404, detail=warning)
         if df.empty:
@@ -353,6 +533,74 @@ def create_app(
         result["Trade Log"] = trimmed
         return result
 
+    @_route("get", "/analytics/{ticker}/ml-predict")
+    def ticker_ml_predict(ticker: str, start: str = "2019-01-01", end: str = "", horizon: int = 1):
+        try:
+            ticker = sanitize_ticker(ticker)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        end_date = end or datetime.today().strftime("%Y-%m-%d")
+        df, _, warning = get_ticker_data(ticker=ticker, start_date=start, end_date=end_date)
+        if warning:
+            raise HTTPException(status_code=404, detail=warning)
+        if df.empty:
+            raise HTTPException(status_code=404, detail="no data")
+
+        prepared = add_return_features(df)
+        prediction = ml_predictor.predict_next_close(prepared["Close"], horizon=max(1, int(horizon)))
+        drift = ml_predictor.detect_factor_drift(prepared["Return"].fillna(0.0))
+        return {
+            "ticker": ticker,
+            "prediction": prediction,
+            "drift": drift,
+        }
+
+    @_route("post", "/governance/strategies/proposals")
+    def governance_submit_proposal(payload: GovernanceProposalCreate):
+        proposal_id = governance.submit_proposal(
+            StrategyProposal(
+                strategy_name=payload.strategy_name,
+                created_by=payload.created_by,
+                rationale=payload.rationale,
+            )
+        )
+        return {"id": int(proposal_id), "status": "PENDING"}
+
+    @_route("get", "/governance/strategies/proposals")
+    def governance_list_proposals(status: str = "", limit: int = 200):
+        frame = governance.list_proposals(status=status or None, limit=limit)
+        return frame.to_dict(orient="records")
+
+    @_route("post", "/governance/strategies/proposals/{proposal_id}/approve")
+    def governance_approve_proposal(proposal_id: int, payload: GovernanceDecisionRequest):
+        updated = governance.approve_proposal(proposal_id, approved_by=payload.approved_by)
+        if not updated:
+            raise HTTPException(status_code=404, detail="proposal not found or already decided")
+        return {"id": int(proposal_id), "status": "APPROVED"}
+
+    @_route("post", "/governance/strategies/proposals/{proposal_id}/reject")
+    def governance_reject_proposal(proposal_id: int, payload: GovernanceDecisionRequest):
+        updated = governance.reject_proposal(proposal_id, approved_by=payload.approved_by)
+        if not updated:
+            raise HTTPException(status_code=404, detail="proposal not found or already decided")
+        return {"id": int(proposal_id), "status": "REJECTED"}
+
+    @_route("post", "/integrations/webhooks/dispatch")
+    def dispatch_webhook(payload: WebhookDispatchRequest):
+        try:
+            result = webhook_notifier.send(
+                payload.url,
+                WebhookPayload(
+                    event=payload.event,
+                    message=payload.message,
+                    source=payload.source,
+                ),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return result
+
     @_route("get", "/users/{username}/reports/portfolio")
     def portfolio_report(username: str, prices: str = "", session_id: str = ""):
         _require_authenticated_user(username, session_id)
@@ -363,6 +611,14 @@ def create_app(
             title=f"QuantVision Portfolio Report | {username}",
             portfolio_metrics=summary,
             positions=positions,
+        )
+        event_tracker.track(
+            AnalyticsEvent(
+                username=username,
+                feature="reports",
+                event_name="export_report",
+                metadata="portfolio_report",
+            )
         )
         return {
             "username": username,

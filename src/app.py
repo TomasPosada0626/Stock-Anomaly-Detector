@@ -1,38 +1,38 @@
-import time
+import secrets
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 import streamlit as st
-from prophet import Prophet
-from sklearn.cluster import DBSCAN
 
-from anomaly_methods import (
-    detect_anomalies_iforest,
-    detect_anomalies_lof,
-    detect_anomalies_one_class_svm,
-    detect_anomalies_zscore,
-)
+from analytics.event_tracker import AnalyticsEvent, EventTracker
+from analytics.experimentation import ExperimentationService
 from config import SESSION_TTL_MINUTES, USERS_DB_PATH
+from integrations.webhooks import WebhookNotifier, WebhookPayload
+from security.input_validation import require_ticker_whitelist, sanitize_csv_upload, sanitize_ticker
 from services.alerts_service import AlertRule, AlertsService
 from services.auth_service import AuthService
 from services.backtesting_service import BacktestingService
 from services.indicators_service import add_indicators
 from services.market_data_service import add_return_features, get_ticker_data
+from services.ml_predictor_service import MLPredictorService
 from services.observability import get_logger
+from services.performance_service import (
+    get_async_job_result,
+    paginate_dataframe,
+    submit_async_job,
+)
 from services.portfolio_service import PortfolioService, PositionInput
 from services.reports_service import ReportsService
 from services.risk_analytics_service import summarize_risk
+from services.strategy_governance_service import StrategyGovernanceService, StrategyProposal
 from services.watchlist_service import WatchlistInput, WatchlistService
 from ui.auth_ui import render_login_panel
 from ui.charts import (
-    build_anomaly_chart,
     build_candlestick_chart,
     build_comparison_chart,
-    build_price_chart,
-    build_terminal_multiview,
-    build_volume_chart,
 )
+from ui.pages import render_anomalies_page, render_dashboard_page
 from utils import rolling_quantile_anomaly
 
 st.set_page_config(page_title="QuantVision", layout="wide")
@@ -44,8 +44,25 @@ watchlist_service = WatchlistService()
 alerts_service = AlertsService()
 backtesting_service = BacktestingService()
 reports_service = ReportsService()
+event_tracker = EventTracker()
+experimentation_service = ExperimentationService()
+governance_service = StrategyGovernanceService()
+ml_predictor_service = MLPredictorService()
+webhook_notifier = WebhookNotifier()
 auth_service.initialize()
 logger.info("quantvision_initialized")
+
+
+def _csrf_token() -> str:
+    token = st.session_state.get("csrf_token", "")
+    if not token:
+        token = secrets.token_urlsafe(24)
+        st.session_state["csrf_token"] = token
+    return str(token)
+
+
+def _is_valid_csrf(token: str) -> bool:
+    return bool(token) and token == st.session_state.get("csrf_token", "")
 
 
 def _apply_theme() -> None:
@@ -92,109 +109,6 @@ def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _run_anomaly_methods(
-    df: pd.DataFrame,
-    selected_methods: list[str],
-    zscore_threshold: float,
-    iforest_contamination: float,
-    dbscan_eps: float,
-    dbscan_min_samples: int,
-    rolling_window: int,
-    quantile_low: float,
-    quantile_high: float,
-    lof_neighbors: int,
-    ocsvm_nu: float,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    model_df = df.copy()
-    comparisons: list[dict[str, float | str]] = []
-    method_labels: list[tuple[str, str]] = []
-
-    for method in selected_methods:
-        start = time.time()
-        col_name = ""
-        params: dict[str, float | int | str] = {}
-
-        if method == "Z-Score":
-            col_name = "Anomaly_zscore"
-            model_df[col_name] = detect_anomalies_zscore(
-                model_df["Return"], threshold=zscore_threshold
-            )
-            params = {"threshold": zscore_threshold}
-        elif method == "I-Forest":
-            col_name = "Anomaly_iforest"
-            model_df[col_name] = detect_anomalies_iforest(
-                model_df["Return"], contamination=iforest_contamination, random_state=42
-            )
-            params = {"contamination": iforest_contamination}
-        elif method == "DBSCAN":
-            col_name = "Anomaly_dbscan"
-            mask = model_df["Return"].notna()
-            model_df[col_name] = False
-            values = model_df.loc[mask, ["Return"]].values.reshape(-1, 1)
-            if len(values) > 0:
-                db = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples)
-                model_df.loc[mask, col_name] = db.fit_predict(values) == -1
-            params = {"eps": dbscan_eps, "min_samples": dbscan_min_samples}
-        elif method == "Prophet":
-            col_name = "Anomaly_prophet"
-            model_df[col_name] = False
-            try:
-                prophet_df = model_df[["Close"]].reset_index()
-                prophet_df.columns = ["ds", "y"]
-                prophet_df["ds"] = pd.to_datetime(prophet_df["ds"]).dt.tz_localize(None)
-                model = Prophet(daily_seasonality=True)
-                model.fit(prophet_df)
-                forecast = model.predict(model.make_future_dataframe(periods=0))
-                residuals = model_df["Close"].values - forecast["yhat"].values
-                model_df[col_name] = np.abs(residuals) > 3 * np.std(residuals)
-            except Exception as prophet_error:
-                logger.warning("prophet_failed error=%s", str(prophet_error))
-            params = {"residual_threshold": 3.0}
-        elif method == "Rolling Quantile":
-            col_name = "Anomaly_rolling_quantile"
-            lower = (
-                model_df["Close"]
-                .rolling(window=rolling_window, min_periods=1)
-                .quantile(quantile_low)
-            )
-            upper = (
-                model_df["Close"]
-                .rolling(window=rolling_window, min_periods=1)
-                .quantile(quantile_high)
-            )
-            model_df[col_name] = (model_df["Close"] < lower) | (model_df["Close"] > upper)
-            params = {"window": rolling_window, "q_low": quantile_low, "q_high": quantile_high}
-        elif method == "LOF":
-            col_name = "Anomaly_lof"
-            model_df[col_name] = detect_anomalies_lof(
-                model_df["Return"], contamination=iforest_contamination, n_neighbors=lof_neighbors
-            )
-            params = {"contamination": iforest_contamination, "n_neighbors": lof_neighbors}
-        elif method == "One-Class SVM":
-            col_name = "Anomaly_ocsvm"
-            model_df[col_name] = detect_anomalies_one_class_svm(model_df["Return"], nu=ocsvm_nu)
-            params = {"nu": ocsvm_nu}
-
-        elapsed = time.time() - start
-        if col_name:
-            method_labels.append((col_name, method))
-            comparisons.append(
-                {
-                    "Method": method,
-                    "Anomalies": int(model_df[col_name].sum()),
-                    "Time (s)": round(elapsed, 4),
-                    "Parameters": str(params),
-                }
-            )
-
-    anomaly_df = model_df.copy()
-    anomaly_df["Method"] = "None"
-    for col, label in method_labels:
-        anomaly_df.loc[anomaly_df[col], "Method"] = label
-    points = anomaly_df[anomaly_df["Method"] != "None"]
-    return model_df, points, pd.DataFrame(comparisons)
-
-
 def _load_market_data(
     tickers: list[str],
     start_date,
@@ -202,9 +116,29 @@ def _load_market_data(
     uploaded_file,
 ) -> dict[str, pd.DataFrame]:
     results: dict[str, pd.DataFrame] = {}
+
+    @st.cache_data(show_spinner=False, ttl=60 * 30)
+    def _cached_prepare_ticker(ticker: str, start_str: str, end_str: str) -> pd.DataFrame:
+        frame, _, warning_message = get_ticker_data(
+            ticker=ticker,
+            start_date=start_str,
+            end_date=end_str,
+            data_dir="data",
+        )
+        if warning_message or frame.empty:
+            return pd.DataFrame()
+        normalized = _normalize_ohlcv(frame)
+        normalized = add_return_features(normalized)
+        normalized = add_indicators(normalized)
+        normalized["Anomaly_rolling_quantile_base"] = rolling_quantile_anomaly(
+            normalized["Close"], window=20, quantile=0.95
+        )
+        return normalized
+
     if uploaded_file is not None:
         try:
-            custom_df = pd.read_csv(uploaded_file, parse_dates=True)
+            csv_text = uploaded_file.getvalue().decode("utf-8", errors="replace")
+            custom_df = sanitize_csv_upload(csv_text)
             if "Date" in custom_df.columns:
                 custom_df = custom_df.set_index("Date")
             custom_df.index = pd.to_datetime(custom_df.index)
@@ -215,30 +149,36 @@ def _load_market_data(
                 custom_df["Close"], window=20, quantile=0.95
             )
             results["USER_CSV"] = custom_df
+            event_tracker.track(
+                AnalyticsEvent(
+                    username=st.session_state.get("username", "anonymous"),
+                    feature="market_data",
+                    event_name="load_market_data",
+                    metadata="source=csv",
+                )
+            )
         except Exception as csv_error:
             st.sidebar.error(f"CSV parse error: {csv_error}")
 
     for ticker in tickers:
         try:
-            df, downloaded, warning_message = get_ticker_data(
-                ticker=ticker,
-                start_date=start_date,
-                end_date=end_date,
-                data_dir="data",
+            safe_ticker = sanitize_ticker(ticker)
+            normalized = _cached_prepare_ticker(
+                safe_ticker,
+                str(start_date),
+                str(end_date),
             )
-            if warning_message:
-                st.warning(warning_message)
-            if downloaded and not df.empty:
-                st.toast(f"{ticker} updated from market source.")
-            if df.empty:
+            if normalized.empty:
                 continue
-            normalized = _normalize_ohlcv(df)
-            normalized = add_return_features(normalized)
-            normalized = add_indicators(normalized)
-            normalized["Anomaly_rolling_quantile_base"] = rolling_quantile_anomaly(
-                normalized["Close"], window=20, quantile=0.95
+            results[safe_ticker] = normalized
+            event_tracker.track(
+                AnalyticsEvent(
+                    username=st.session_state.get("username", "anonymous"),
+                    feature="market_data",
+                    event_name="load_market_data",
+                    metadata=f"source=ticker;ticker={safe_ticker}",
+                )
             )
-            results[ticker] = normalized
         except Exception as data_error:
             logger.exception("market_data_load_failed ticker=%s", ticker)
             st.error(f"Data load failed for {ticker}: {data_error}")
@@ -253,88 +193,6 @@ def _render_header(username: str, role: str) -> None:
         unsafe_allow_html=True,
     )
     st.caption(f"Authenticated as {username} | Role: {role}")
-
-
-def _render_dashboard(market_data: dict[str, pd.DataFrame], focus_ticker: str) -> None:
-    st.subheader("Professional Market Dashboard")
-    if focus_ticker not in market_data:
-        st.info("Load market data from the sidebar to render dashboard metrics.")
-        return
-
-    df = market_data[focus_ticker].dropna(subset=["Close"]).copy()
-    if df.empty:
-        st.warning("No close price data available for this ticker.")
-        return
-
-    current_price = float(df["Close"].iloc[-1])
-    previous_price = float(df["Close"].iloc[-2]) if len(df) > 1 else current_price
-    daily_change_pct = ((current_price / previous_price) - 1) * 100 if previous_price else 0.0
-    market_cap_proxy = current_price * float(df["Volume"].tail(20).mean())
-    pe_proxy = max(0.0, current_price / max(0.5, float(df["Close"].tail(252).mean()) * 0.08))
-    dividend_yield_proxy = max(
-        0.0, min(8.0, float(df["Close"].pct_change().rolling(252).mean().iloc[-1] * 100))
-    )
-    beta_proxy = 1.0 + float(df["Return"].rolling(63).std().fillna(0).iloc[-1]) * 5
-    high_52 = float(df["Close"].tail(252).max())
-    low_52 = float(df["Close"].tail(252).min())
-
-    row1 = st.columns(4)
-    row1[0].metric("Price", f"${current_price:,.2f}", f"{daily_change_pct:.2f}%")
-    row1[1].metric("Volume", f"{int(df['Volume'].iloc[-1]):,}")
-    row1[2].metric("Market Cap (proxy)", f"${market_cap_proxy:,.0f}")
-    row1[3].metric("P/E Ratio (proxy)", f"{pe_proxy:.2f}")
-
-    row2 = st.columns(4)
-    row2[0].metric("Dividend Yield (proxy)", f"{dividend_yield_proxy:.2f}%")
-    row2[1].metric("Beta (proxy)", f"{beta_proxy:.2f}")
-    row2[2].metric("52W High", f"${high_52:,.2f}")
-    row2[3].metric("52W Low", f"${low_52:,.2f}")
-
-    st.plotly_chart(build_candlestick_chart(df, focus_ticker), width="stretch")
-    st.plotly_chart(build_volume_chart(df, focus_ticker), width="stretch")
-    st.plotly_chart(build_terminal_multiview(df, focus_ticker), width="stretch")
-
-
-def _render_anomalies(
-    market_data: dict[str, pd.DataFrame],
-    selected_methods: list[str],
-    params: dict[str, float | int],
-) -> None:
-    st.subheader("Machine Learning Anomaly Detection Lab")
-    if not market_data:
-        st.info("Load market data from the sidebar to run anomaly detection.")
-        return
-
-    tabs = st.tabs(list(market_data.keys()))
-    for idx, (ticker, raw_df) in enumerate(market_data.items()):
-        with tabs[idx]:
-            df = raw_df.copy()
-            modeled, points, benchmark = _run_anomaly_methods(
-                df=df,
-                selected_methods=selected_methods,
-                zscore_threshold=float(params["zscore_threshold"]),
-                iforest_contamination=float(params["iforest_contamination"]),
-                dbscan_eps=float(params["dbscan_eps"]),
-                dbscan_min_samples=int(params["dbscan_min_samples"]),
-                rolling_window=int(params["rolling_window"]),
-                quantile_low=float(params["quantile_low"]),
-                quantile_high=float(params["quantile_high"]),
-                lof_neighbors=int(params["lof_neighbors"]),
-                ocsvm_nu=float(params["ocsvm_nu"]),
-            )
-            fig_price, y_data = build_price_chart(modeled, ticker)
-            st.plotly_chart(fig_price, width="stretch")
-
-            fig_anomaly = build_anomaly_chart(modeled, points, y_data)
-            st.plotly_chart(fig_anomaly, width="stretch")
-
-            st.markdown("### Benchmark")
-            st.dataframe(benchmark, width="stretch")
-            st.download_button(
-                f"Export {ticker} anomalies CSV",
-                modeled.to_csv().encode("utf-8"),
-                f"{ticker}_quantvision_anomalies.csv",
-            )
 
 
 def _render_comparison(market_data: dict[str, pd.DataFrame]) -> None:
@@ -377,13 +235,16 @@ def _render_comparison(market_data: dict[str, pd.DataFrame]) -> None:
 def _render_portfolio(market_data: dict[str, pd.DataFrame], username: str) -> None:
     st.subheader("Portfolio Tracker")
     with st.form("portfolio_add_form"):
+        security_token = st.text_input("Security Token", value=_csrf_token(), type="password")
         cols = st.columns(4)
         ticker = cols[0].text_input("Ticker", value="AAPL").upper().strip()
         quantity = cols[1].number_input("Quantity", min_value=0.0, value=10.0, step=1.0)
         buy_price = cols[2].number_input("Buy Price", min_value=0.0, value=100.0, step=0.5)
         buy_date = cols[3].date_input("Buy Date", value=datetime.today()).isoformat()
         submitted = st.form_submit_button("Add Position")
-        if submitted and ticker and quantity > 0 and buy_price > 0:
+        if submitted and not _is_valid_csrf(security_token):
+            st.error("Security token mismatch. Reload and try again.")
+        elif submitted and ticker and quantity > 0 and buy_price > 0:
             portfolio_service.add_position(
                 PositionInput(
                     username=username,
@@ -414,16 +275,21 @@ def _render_portfolio(market_data: dict[str, pd.DataFrame], username: str) -> No
 def _render_watchlists(username: str) -> None:
     st.subheader("Watchlists")
     with st.form("watchlist_create_form"):
+        security_token = st.text_input("Security Token", value=_csrf_token(), type="password")
         name = st.text_input("Watchlist name", value="Technology")
         create = st.form_submit_button("Create / Get")
-        if create and name.strip():
+        if create and not _is_valid_csrf(security_token):
+            st.error("Security token mismatch. Reload and try again.")
+        elif create and name.strip():
             watchlist_id = watchlist_service.create_watchlist(
                 WatchlistInput(username=username, name=name)
             )
             st.session_state["active_watchlist_id"] = watchlist_id
             st.success(f"Watchlist ready: {name}")
 
-    watchlists = watchlist_service.list_watchlists(username)
+    watchlists = paginate_dataframe(
+        watchlist_service.list_watchlists(username), limit=50, sort_by="id", descending=True
+    )
     st.dataframe(watchlists, width="stretch")
     if watchlists.empty:
         return
@@ -504,12 +370,15 @@ def _render_alerts(market_data: dict[str, pd.DataFrame], username: str) -> None:
         "new_low",
     ]
     with st.form("alert_rule_form"):
+        security_token = st.text_input("Security Token", value=_csrf_token(), type="password")
         cols = st.columns(3)
         ticker = cols[0].text_input("Ticker", value="AAPL").upper().strip()
         rule_type = cols[1].selectbox("Rule Type", options=rule_types)
         threshold = cols[2].number_input("Threshold (optional)", value=5.0)
         create_rule = st.form_submit_button("Create Rule")
-        if create_rule and ticker:
+        if create_rule and not _is_valid_csrf(security_token):
+            st.error("Security token mismatch. Reload and try again.")
+        elif create_rule and ticker:
             threshold_value = threshold if rule_type == "price_change_pct" else None
             alerts_service.create_rule(
                 AlertRule(
@@ -538,7 +407,10 @@ def _render_alerts(market_data: dict[str, pd.DataFrame], username: str) -> None:
         st.success("Rule evaluation completed.")
 
     st.markdown("### Alert History")
-    st.dataframe(alerts_service.list_history(username), width="stretch")
+    history = paginate_dataframe(
+        alerts_service.list_history(username), limit=50, sort_by="triggered_at", descending=True
+    )
+    st.dataframe(history, width="stretch")
 
 
 def _render_backtesting(market_data: dict[str, pd.DataFrame]) -> None:
@@ -564,6 +436,154 @@ def _render_backtesting(market_data: dict[str, pd.DataFrame]) -> None:
     cols[2].metric("Win Rate", f"{results['Win Rate %']:.2f}%")
     cols[3].metric("Buy & Hold", f"{results['Buy & Hold %']:.2f}%")
     cols[4].metric("Max Drawdown", f"{results['Max Drawdown %']:.2f}%")
+
+
+def _render_ai_lab(market_data: dict[str, pd.DataFrame]) -> None:
+    st.subheader("AI Lab")
+    if not market_data:
+        st.info("Load market data first.")
+        return
+
+    ticker = st.selectbox("AI ticker", options=list(market_data.keys()), key="ai_ticker")
+    horizon = st.slider("Prediction horizon (days)", min_value=1, max_value=30, value=5)
+    frame = market_data[ticker]
+
+    prediction = ml_predictor_service.predict_next_close(frame["Close"], horizon=horizon)
+    drift = ml_predictor_service.detect_factor_drift(frame["Return"].fillna(0.0))
+
+    cols = st.columns(3)
+    cols[0].metric("Current Close", f"${prediction['current_close']:.2f}")
+    cols[1].metric("Predicted Close", f"${prediction['predicted_close']:.2f}")
+    cols[2].metric("Expected Change", f"{prediction['expected_change_pct']:.2f}%")
+
+    st.write("Drift", drift)
+    event_tracker.track(
+        AnalyticsEvent(
+            username=st.session_state.get("username", "anonymous"),
+            feature="ai_lab",
+            event_name="run_ml_prediction",
+            metadata=f"ticker={ticker};horizon={horizon}",
+        )
+    )
+
+
+def _render_governance() -> None:
+    st.subheader("Strategy Governance")
+    with st.form("governance_form"):
+        security_token = st.text_input("Security Token", value=_csrf_token(), type="password")
+        strategy_name = st.text_input("Strategy name", value="Momentum Plus")
+        rationale = st.text_area("Rationale", value="Add anomaly filters to reduce false positives.")
+        submitted = st.form_submit_button("Submit proposal")
+        if submitted and not _is_valid_csrf(security_token):
+            st.error("Security token mismatch. Reload and try again.")
+        elif submitted:
+            proposal_id = governance_service.submit_proposal(
+                StrategyProposal(
+                    strategy_name=strategy_name,
+                    created_by=st.session_state.get("username", "unknown"),
+                    rationale=rationale,
+                )
+            )
+            st.success(f"Proposal submitted: {proposal_id}")
+
+    proposals = governance_service.list_proposals(limit=200)
+    st.dataframe(proposals, width="stretch")
+
+    if proposals.empty:
+        return
+    proposal_id = int(st.selectbox("Proposal ID", options=proposals["id"].tolist(), key="gov_id"))
+    col_a, col_b = st.columns(2)
+    if col_a.button("Approve"):
+        governance_service.approve_proposal(proposal_id, approved_by=st.session_state.get("username", "admin"))
+        st.rerun()
+    if col_b.button("Reject"):
+        governance_service.reject_proposal(proposal_id, approved_by=st.session_state.get("username", "admin"))
+        st.rerun()
+
+    st.markdown("### Webhook Dispatch")
+    webhook_url = st.text_input("Webhook URL", value="https://example.com/hook")
+    webhook_message = st.text_input("Webhook message", value="Strategy governance update")
+    if st.button("Send Webhook Notification"):
+        try:
+            result = webhook_notifier.send(
+                webhook_url,
+                WebhookPayload(
+                    event="governance_update",
+                    message=webhook_message,
+                    source="quantvision_ui",
+                ),
+            )
+            st.success(f"Webhook dispatched (status={result['status']})")
+        except Exception as exc:
+            st.error(f"Webhook failed: {exc}")
+
+
+def _render_analytics_dashboard() -> None:
+    st.subheader("Usage Analytics")
+    events = event_tracker.list_events(limit=500)
+    st.dataframe(events, width="stretch")
+
+    top = event_tracker.top_features(limit=10)
+    st.markdown("### Top Features")
+    st.dataframe(top, width="stretch")
+
+    funnel = event_tracker.funnel()
+    st.markdown("### Funnel")
+    st.json(funnel)
+
+    st.markdown("### A/B Experimentation")
+    with st.form("ab_create_form"):
+        exp_name = st.text_input("Experiment name", value="dashboard_cta_v1")
+        exp_feature = st.text_input("Feature", value="dashboard")
+        exp_variants = st.text_input("Variants (comma separated)", value="control,treatment")
+        exp_hypothesis = st.text_area("Hypothesis", value="Treatment increases click-through rate")
+        create_exp = st.form_submit_button("Create / Update Experiment")
+        if create_exp:
+            variants = [item.strip() for item in exp_variants.split(",") if item.strip()]
+            experimentation_service.create_experiment(
+                name=exp_name,
+                feature=exp_feature,
+                variants=variants,
+                hypothesis=exp_hypothesis,
+            )
+            st.success(f"Experiment ready: {exp_name}")
+
+    experiments = experimentation_service.list_experiments()
+    st.dataframe(experiments, width="stretch")
+    if experiments.empty:
+        return
+
+    selected_experiment = st.selectbox("Experiment", options=experiments["name"].tolist())
+    username = st.text_input(
+        "Username for assignment/conversion",
+        value=st.session_state.get("username", "guest"),
+    )
+    col_a, col_b = st.columns(2)
+    if col_a.button("Assign Variant"):
+        variant = experimentation_service.assign_variant(selected_experiment, username)
+        event_tracker.track(
+            AnalyticsEvent(
+                username=username,
+                feature="experimentation",
+                event_name="ab_exposure",
+                metadata=f"experiment={selected_experiment};variant={variant}",
+            )
+        )
+        st.info(f"Assigned variant: {variant}")
+    if col_b.button("Mark Conversion"):
+        experimentation_service.track_conversion(selected_experiment, username)
+        event_tracker.track(
+            AnalyticsEvent(
+                username=username,
+                feature="experimentation",
+                event_name="ab_conversion",
+                metadata=f"experiment={selected_experiment}",
+            )
+        )
+        st.success("Conversion marked")
+
+    st.markdown("### Experiment Summary")
+    st.dataframe(experimentation_service.summary(selected_experiment), width="stretch")
 
 
 def _render_risk(market_data: dict[str, pd.DataFrame], focus_ticker: str) -> None:
@@ -621,6 +641,29 @@ def _render_reports(market_data: dict[str, pd.DataFrame], username: str) -> None
     png_bytes = reports_service.to_png_bytes(build_candlestick_chart(df, ticker))
 
     st.dataframe(pd.DataFrame([kpis]), width="stretch")
+    if st.button("Generate PDF Asynchronously"):
+        job_id = f"report_{username}_{ticker}_{int(datetime.now().timestamp())}"
+        submit_async_job(
+            job_id,
+            reports_service.build_executive_report,
+            f"QuantVision Executive Report | {ticker} | {username}",
+            kpis,
+            benchmark,
+        )
+        st.session_state["report_job_id"] = job_id
+        st.info(f"Report job queued: {job_id}")
+
+    active_job_id = st.session_state.get("report_job_id", "")
+    if active_job_id:
+        status, payload = get_async_job_result(active_job_id)
+        st.caption(f"Async report job status: {status}")
+        if status == "completed" and isinstance(payload, (bytes, bytearray)):
+            st.download_button(
+                "Download Async Executive Report (PDF)",
+                data=payload,
+                file_name=f"{ticker}_executive_report_async.pdf",
+                mime="application/pdf",
+            )
     st.download_button(
         "Download Executive Report (PDF)",
         data=pdf_bytes,
@@ -712,10 +755,18 @@ popular_tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "JPM
 tickers = st.sidebar.multiselect("Tickers", options=popular_tickers, default=["AAPL", "MSFT"])
 custom_ticker = st.sidebar.text_input("Custom tickers (comma separated)", value="")
 if custom_ticker.strip():
-    tickers += [token.strip().upper() for token in custom_ticker.split(",") if token.strip()]
+    for token in custom_ticker.split(","):
+        candidate = token.strip().upper()
+        if not candidate:
+            continue
+        try:
+            tickers.append(require_ticker_whitelist(candidate, set(popular_tickers)))
+        except ValueError:
+            st.sidebar.warning(f"Ignored unsupported ticker: {candidate}")
 tickers = sorted(set(tickers))
 
-start_date = st.sidebar.date_input("Start Date", value=datetime(2018, 1, 1))
+default_start = datetime(datetime.today().year - 2, 1, 1)
+start_date = st.sidebar.date_input("Start Date", value=default_start)
 end_date = st.sidebar.date_input("End Date", value=datetime.today())
 
 method_options = [
@@ -757,9 +808,9 @@ focus_ticker = st.sidebar.selectbox(
 )
 
 if module == "Dashboard":
-    _render_dashboard(market_data, focus_ticker)
+    render_dashboard_page(market_data, focus_ticker)
 elif module == "Anomalies":
-    _render_anomalies(market_data, selected_methods, params)
+    render_anomalies_page(market_data, selected_methods, params)
 elif module == "Comparison":
     _render_comparison(market_data)
 elif module == "Portfolio":
@@ -774,5 +825,11 @@ elif module == "Risk":
     _render_risk(market_data, focus_ticker)
 elif module == "Reports":
     _render_reports(market_data, username)
+elif module == "AI Lab":
+    _render_ai_lab(market_data)
+elif module == "Governance":
+    _render_governance()
+elif module == "Analytics":
+    _render_analytics_dashboard()
 elif module == "Admin":
     _render_admin()

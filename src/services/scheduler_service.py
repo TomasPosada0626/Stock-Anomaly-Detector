@@ -5,6 +5,7 @@ from typing import Callable
 
 import pandas as pd
 
+from observability.metrics import record_scheduler_failure
 from services.alerts_service import AlertsService
 from services.observability import get_logger
 
@@ -124,6 +125,7 @@ class AlertScheduler:
                         cycle_hook(cycle_number, summary)
                 except Exception as exc:  # pragma: no cover - resiliency path
                     consecutive_failures += 1
+                    record_scheduler_failure(1)
                     error_message = str(exc)
                     self.logger.exception(
                         "scheduler_continuous_cycle_failed cycle=%s consecutive_failures=%s error=%s",
@@ -134,6 +136,7 @@ class AlertScheduler:
                     if error_hook is not None:
                         error_hook(cycle_number, error_message)
                     if consecutive_failures >= max_consecutive_failures:
+                        record_scheduler_failure(consecutive_failures)
                         self.logger.error(
                             "scheduler_continuous_stopping_after_failures failures=%s",
                             consecutive_failures,

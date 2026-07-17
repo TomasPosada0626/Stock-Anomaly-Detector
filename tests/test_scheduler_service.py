@@ -166,3 +166,37 @@ def test_scheduler_run_continuous_stops_after_max_failures(monkeypatch, tmp_path
     assert len(failures) == 2
     assert failures[0][0] == 1
     assert "cycle failed" in failures[0][1]
+
+
+def test_scheduler_run_continuous_resets_failure_counter_after_success(
+    monkeypatch, tmp_path
+) -> None:
+    db_path = str(tmp_path / "quantvision.db")
+    alerts = AlertsService(db_path=db_path)
+    scheduler = AlertScheduler(alerts, fetch_market_data=lambda _: pd.DataFrame())
+
+    sequence = [RuntimeError("cycle failed #1"), {"alice": 0}, RuntimeError("cycle failed #2")]
+    failures = []
+    cycles = []
+
+    def _evaluate_sequence():
+        next_value = sequence.pop(0)
+        if isinstance(next_value, Exception):
+            raise next_value
+        return next_value
+
+    monkeypatch.setattr(scheduler, "evaluate_all_users_once", _evaluate_sequence)
+    monkeypatch.setattr(scheduler_module.time, "sleep", lambda seconds: None)
+
+    scheduler.run_continuous(
+        interval_minutes=1,
+        max_cycles=3,
+        max_consecutive_failures=2,
+        cycle_hook=lambda cycle, summary: cycles.append((cycle, summary)),
+        error_hook=lambda cycle, message: failures.append((cycle, message)),
+    )
+
+    # First failure does not stop scheduler, success resets counter, third cycle may fail again.
+    assert len(failures) == 2
+    assert len(cycles) == 1
+    assert cycles[0][0] == 2

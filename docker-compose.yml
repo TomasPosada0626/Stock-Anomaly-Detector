@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: streamlit run src/app.py --server.address=0.0.0.0 --server.port=8501
+    environment:
+      ENVIRONMENT: development
+      STREAMLIT_SERVER_HEADLESS: "true"
+      USE_SQLALCHEMY_REPOSITORIES: "true"
+      DATABASE_URL: postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
+      REDIS_URL: redis://redis:6379/0
+      SCHEDULER_WORKER_MODE: "false"
+    ports:
+      - "8501:8501"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+    environment:
+      ENVIRONMENT: development
+      USE_SQLALCHEMY_REPOSITORIES: "true"
+      DATABASE_URL: postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python scripts/run_scheduler.py
+    environment:
+      ENVIRONMENT: development
+      USE_SQLALCHEMY_REPOSITORIES: "true"
+      DATABASE_URL: postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
+      REDIS_URL: redis://redis:6379/0
+      SCHEDULER_WORKER_MODE: "true"
+      SCHEDULER_INTERVAL_MINUTES: "15"
+      SCHEDULER_MAX_CYCLES: "0"
+      SCHEDULER_MAX_CONSECUTIVE_FAILURES: "10"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: quantvision
+      POSTGRES_PASSWORD: quantvision
+      POSTGRES_DB: quantvision
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantvision -d quantvision"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

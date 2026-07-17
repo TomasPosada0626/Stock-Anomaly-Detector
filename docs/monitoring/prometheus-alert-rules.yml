@@ -1,0 +1,20 @@
+groups:
+  - name: quantvision-alerts
+    rules:
+      - alert: QuantVisionHighSchedulerFailures
+        expr: quantvision_counter_total{metric="scheduler_failures_total"} > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scheduler failures are increasing"
+          description: "scheduler_failures_total has exceeded 5 in the last evaluation window."
+
+      - alert: QuantVisionHighAnomalyRuntime
+        expr: quantvision_timing_avg_seconds{metric="anomaly_method_runtime_seconds"} > 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Anomaly runtime average is high"
+          description: "Average anomaly runtime is above 1 second."

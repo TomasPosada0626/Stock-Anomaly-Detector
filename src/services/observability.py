@@ -1,12 +1,27 @@
+import json
 import logging
 import os
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from config import APP_LOG_DIR
 
 _METRICS_COUNTERS: dict[str, int] = {}
 _METRICS_TIMINGS: dict[str, list[float]] = {}
+
+
+class JsonLogFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=True)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -16,10 +31,7 @@ def get_logger(name: str) -> logging.Logger:
 
     logger.setLevel(logging.INFO)
 
-    formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
-    )
+    formatter = JsonLogFormatter()
 
     logs_dir = APP_LOG_DIR
     os.makedirs(logs_dir, exist_ok=True)
@@ -78,6 +90,31 @@ def get_metrics_snapshot() -> dict[str, Any]:
         "timing_count": {key: len(values) for key, values in _METRICS_TIMINGS.items()},
         "timing_avg_seconds": averages,
     }
+
+
+def get_prometheus_metrics_text(namespace: str = "quantvision") -> str:
+    counters = dict(_METRICS_COUNTERS)
+    timings = dict(_METRICS_TIMINGS)
+    lines = [
+        f"# HELP {namespace}_counter_total Aggregated counter metrics",
+        f"# TYPE {namespace}_counter_total counter",
+    ]
+    for metric_name, value in sorted(counters.items()):
+        safe_name = metric_name.lower().replace(" ", "_")
+        lines.append(f'{namespace}_counter_total{{metric="{safe_name}"}} {int(value)}')
+
+    lines.extend(
+        [
+            f"# HELP {namespace}_timing_avg_seconds Average timing in seconds",
+            f"# TYPE {namespace}_timing_avg_seconds gauge",
+        ]
+    )
+    for metric_name, values in sorted(timings.items()):
+        safe_name = metric_name.lower().replace(" ", "_")
+        avg = (sum(values) / len(values)) if values else 0.0
+        lines.append(f'{namespace}_timing_avg_seconds{{metric="{safe_name}"}} {avg:.8f}')
+
+    return "\n".join(lines) + "\n"
 
 
 def reset_metrics() -> None:

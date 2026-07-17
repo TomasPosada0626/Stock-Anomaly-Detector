@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantvision-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quantvision-ui
+  template:
+    metadata:
+      labels:
+        app: quantvision-ui
+    spec:
+      containers:
+        - name: ui
+          image: quantvision:latest
+          command: ["streamlit", "run", "src/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+          ports:
+            - containerPort: 8501
+          env:
+            - name: STREAMLIT_SERVER_HEADLESS
+              value: "true"
+            - name: DATA_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quantvision-secrets
+                  key: data-encryption-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quantvision-ui
+spec:
+  type: LoadBalancer
+  selector:
+    app: quantvision-ui
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8501

@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantvision-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: quantvision-api
+  template:
+    metadata:
+      labels:
+        app: quantvision-api
+    spec:
+      containers:
+        - name: api
+          image: quantvision:latest
+          command: ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+          env:
+            - name: STREAMLIT_SERVER_HEADLESS
+              value: "true"
+            - name: DATA_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quantvision-secrets
+                  key: data-encryption-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quantvision-api
+spec:
+  type: ClusterIP
+  selector:
+    app: quantvision-api
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000

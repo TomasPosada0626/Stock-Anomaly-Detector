@@ -5,6 +5,8 @@ from typing import Callable
 
 import pandas as pd
 
+from observability.metrics import record_trades_executed
+
 
 @dataclass(frozen=True)
 class StrategyRules:
@@ -145,9 +147,12 @@ class BacktestingService:
         peak = equity.cummax().replace(0.0, pd.NA)
         drawdown = ((equity - peak) / peak).fillna(0.0)
 
+        trade_count = len(trade_returns)
+        record_trades_executed(trade_count)
+
         return {
             "Return %": float(strat_return),
-            "Trades": float(len(trade_returns)),
+            "Trades": float(trade_count),
             "Win Rate %": float(win_rate),
             "Buy & Hold %": float(buy_hold),
             "Max Drawdown %": float(drawdown.min() * 100),

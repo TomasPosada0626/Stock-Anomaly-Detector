@@ -1,6 +1,17 @@
 version: "3"
 
 tasks:
+  setup:local:
+    desc: Run local bootstrap script
+    cmds:
+      - bash scripts/setup_local.sh
+
+  hooks:install:
+    desc: Install pre-commit hooks
+    cmds:
+      - ./.venv/Scripts/python -m pip install pre-commit
+      - ./.venv/Scripts/python -m pre_commit install
+
   bootstrap:
     desc: Create virtualenv and install app dependencies
     cmds:

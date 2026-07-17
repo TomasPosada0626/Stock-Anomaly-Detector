@@ -8,7 +8,13 @@ from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
 
 
-def detect_anomalies_zscore(returns: Series, threshold: float = 3) -> Series:
+def _coerce_returns(returns: Series | None) -> Series:
+    if returns is None:
+        return pd.Series(dtype=float)
+    return returns
+
+
+def detect_anomalies_zscore(returns: Series | None, threshold: float = 3) -> Series:
     """
     Detect anomalies in a pandas Series using the Z-Score method.
 
@@ -19,14 +25,25 @@ def detect_anomalies_zscore(returns: Series, threshold: float = 3) -> Series:
     Returns:
         pd.Series: Boolean Series where True indicates an anomaly.
     """
-    mean = returns.mean()
-    std = returns.std()
-    # An anomaly is any value more than 'threshold' std deviations from the mean
-    return np.abs(returns - mean) > threshold * std
+    returns_series = _coerce_returns(returns)
+    result = pd.Series(False, index=returns_series.index)
+    mask = returns_series.notna()
+    clean = returns_series[mask]
+    if clean.empty:
+        return result
+
+    mean = clean.mean()
+    std = clean.std()
+    if std == 0 or np.isnan(std):
+        return result
+
+    # An anomaly is any value more than 'threshold' std deviations from the mean.
+    result[mask] = np.abs(clean - mean) > threshold * std
+    return result
 
 
 def detect_anomalies_iforest(
-    returns: Series, contamination: float = 0.01, random_state: Optional[int] = 42
+    returns: Series | None, contamination: float = 0.01, random_state: Optional[int] = 42
 ) -> Series:
     """
     Detect anomalies in a pandas Series using the Isolation Forest algorithm.
@@ -39,17 +56,22 @@ def detect_anomalies_iforest(
     Returns:
         pd.Series: Boolean Series where True indicates an anomaly.
     """
-    mask = returns.notna()
+    returns_series = _coerce_returns(returns)
+    mask = returns_series.notna()
+    result = pd.Series(False, index=returns_series.index)
+    clean = returns_series[mask]
+    if clean.empty:
+        return result
+
     iso = IsolationForest(contamination=contamination, random_state=random_state)
-    preds = iso.fit_predict(returns[mask].values.reshape(-1, 1))
-    result = pd.Series(False, index=returns.index)
+    preds = iso.fit_predict(clean.values.reshape(-1, 1))
     # Mark as anomaly where prediction is -1
     result[mask] = preds == -1
     return result
 
 
 def detect_anomalies_lof(
-    returns: Series, contamination: float = 0.01, n_neighbors: int = 20
+    returns: Series | None, contamination: float = 0.01, n_neighbors: int = 20
 ) -> Series:
     """
     Detect anomalies in a pandas Series using Local Outlier Factor.
@@ -62,9 +84,10 @@ def detect_anomalies_lof(
     Returns:
         pd.Series: Boolean Series where True indicates an anomaly.
     """
-    mask = returns.notna()
-    clean = returns[mask]
-    result = pd.Series(False, index=returns.index)
+    returns_series = _coerce_returns(returns)
+    mask = returns_series.notna()
+    clean = returns_series[mask]
+    result = pd.Series(False, index=returns_series.index)
     if clean.empty or len(clean) < 3:
         return result
     # LOF requires n_neighbors < n_samples.
@@ -76,7 +99,7 @@ def detect_anomalies_lof(
 
 
 def detect_anomalies_one_class_svm(
-    returns: Series, nu: float = 0.05, gamma: str = "scale"
+    returns: Series | None, nu: float = 0.05, gamma: str = "scale"
 ) -> Series:
     """
     Detect anomalies in a pandas Series using One-Class SVM.
@@ -89,9 +112,10 @@ def detect_anomalies_one_class_svm(
     Returns:
         pd.Series: Boolean Series where True indicates an anomaly.
     """
-    mask = returns.notna()
-    clean = returns[mask]
-    result = pd.Series(False, index=returns.index)
+    returns_series = _coerce_returns(returns)
+    mask = returns_series.notna()
+    clean = returns_series[mask]
+    result = pd.Series(False, index=returns_series.index)
     if clean.empty or len(clean) < 3:
         return result
     model = OneClassSVM(nu=nu, gamma=gamma)

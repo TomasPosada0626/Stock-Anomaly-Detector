@@ -7,7 +7,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     text = None  # type: ignore[assignment]
 
-LATEST_SCHEMA_VERSION = 1
+LATEST_SCHEMA_VERSION = 2
 
 
 def _utcnow_iso() -> str:
@@ -108,6 +108,43 @@ def _migration_1_create_domain_tables(engine) -> None:
         )
 
 
+def _migration_2_add_performance_indexes(engine) -> None:
+    assert text is not None
+    statements = [
+        "CREATE INDEX IF NOT EXISTS idx_portfolio_positions_user_ticker_date ON portfolio_positions (username, ticker, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_watchlists_user_created_at ON watchlists (username, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_watchlist_items_ticker_created_at ON watchlist_items (ticker, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_alert_rules_user_ticker_active ON alert_rules (username, ticker, active)",
+        "CREATE INDEX IF NOT EXISTS idx_alert_rules_ticker_created_at ON alert_rules (ticker, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_alert_history_user_triggered_at ON alert_history (username, triggered_at)",
+        "CREATE INDEX IF NOT EXISTS idx_alert_history_ticker_triggered_at ON alert_history (ticker, triggered_at)",
+    ]
+
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+        conn.execute(
+            text(
+                "INSERT INTO schema_migrations (version, description, applied_at) VALUES (:version, :description, :applied_at)"
+            ),
+            {
+                "version": 2,
+                "description": "add_performance_indexes",
+                "applied_at": _utcnow_iso(),
+            },
+        )
+
+
+def explain_query_plan(engine, query: str) -> list[tuple]:
+    """Return a portable query-plan snapshot for diagnostics in development environments."""
+    if text is None:
+        raise RuntimeError("SQLAlchemy dependency not available")
+
+    with engine.begin() as conn:
+        result = conn.execute(text(f"EXPLAIN QUERY PLAN {query}"))
+        return [tuple(row) for row in result.fetchall()]
+
+
 def ensure_domain_schema(engine, target_version: int = LATEST_SCHEMA_VERSION) -> int:
     if text is None:
         raise RuntimeError("SQLAlchemy dependency not available")
@@ -118,5 +155,9 @@ def ensure_domain_schema(engine, target_version: int = LATEST_SCHEMA_VERSION) ->
     if current < 1 and target_version >= 1:
         _migration_1_create_domain_tables(engine)
         current = 1
+
+    if current < 2 and target_version >= 2:
+        _migration_2_add_performance_indexes(engine)
+        current = 2
 
     return current

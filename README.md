@@ -27,12 +27,51 @@ Designed following enterprise-grade software engineering practices including Cle
 - Tomas Posada ([GitHub](https://github.com/TomasPosada0626))
 
 ## Product Vision
-QuantVision helps analysts and investors:
-- Monitor market behavior through professional dashboards.
-- Detect outliers using statistical and machine learning models.
-- Compare assets with return, volatility, correlation, and drawdown analytics.
-- Manage portfolios, watchlists, and actionable alert workflows.
-- Evaluate strategies with a backtesting engine and benchmark against Buy & Hold.
+Most market tools are either data terminals designed for institutions or charting apps designed for discretionary retail workflows. QuantVision is intentionally positioned in the middle: an analyst-grade workspace where data ingestion, anomaly detection, risk, alerts, and reporting are connected in one execution flow.
+
+The key difference is operational continuity. Instead of stopping at visual charts, QuantVision takes users from signal discovery to exportable artifacts (CSV/PDF/PNG), with schedulable alert workflows and an API layer for integration. This makes it useful for portfolio analysis, strategy iteration, and production-style demos.
+
+As a portfolio project, QuantVision also demonstrates engineering maturity: Clean Architecture boundaries, high automated test coverage, CI/CD gates, security checks, and deployment-ready packaging. The result is not just a notebook experiment, but a product-like system.
+
+### Why QuantVision vs Alternatives
+
+| Capability | QuantVision | Bloomberg Terminal | Finviz | TradingView |
+|---|---|---|---|---|
+| Unified anomaly lab (multi-method) | Yes | Partial/workflow-dependent | No | No |
+| Built-in strategy backtesting view | Yes | Limited by setup/workspace | Basic | Community scripts |
+| Export-ready analytics reports (PDF/CSV/PNG) | Yes | Yes | Limited | Limited |
+| Self-hosted/open architecture for customization | Yes | No | No | No |
+| Portfolio-project developer transparency | Yes (full source) | No | No | No |
+
+### Product Screenshots
+
+#### 1) Professional Market Dashboard
+![QuantVision Dashboard](screenshots/1.png)
+
+#### 2) Machine Learning Anomaly Lab
+![QuantVision Anomaly Lab](screenshots/2.png)
+
+#### 3) Reports and Export Center
+![QuantVision Reports](screenshots/3.png)
+
+### Real Results Snapshot
+
+Backtesting example (AAPL, 2023):
+- Strategy: RSI + anomaly confirmation
+- Strategy return: **+23.0%**
+- Buy & Hold: **+18.0%**
+- Outcome: higher return with improved downside control through anomaly-aware entries/exits
+
+See full examples in:
+- `docs/CASE_STUDIES.md`
+
+### 5-Minute Onboarding
+
+Follow the fast path from login to anomaly export:
+- `docs/QUICK_START.md`
+
+Visual walkthrough and demo narrative:
+- `docs/FEATURE_SHOWCASE.md`
 
 ## Architecture
 The project follows a modular service-driven structure:
@@ -105,6 +144,11 @@ Design principles:
 - Risk analytics:
   - Sharpe, Sortino, Maximum Drawdown, Volatility, Beta, Alpha, Correlation, VaR.
 - FastAPI layer for health checks and portfolio/alerts endpoints.
+- Strategy governance workflows with proposal approval lifecycle.
+- AI Lab prediction and factor drift detection.
+- Webhook dispatch integration for operational notifications.
+- Internal usage analytics tracking with funnel and feature popularity views.
+- Built-in A/B experimentation framework (assignment, exposure, conversion, variant summary).
 
 ## Use Cases
 - Buy-side technical analysis workflow.
@@ -150,6 +194,15 @@ Recommended production flags for worker mode:
 docker build -t quantvision .
 docker run -p 8501:8501 quantvision
 ```
+
+### Docker Compose (UI + API + PostgreSQL + Redis + Scheduler)
+```bash
+docker compose up --build
+```
+
+Main local endpoints:
+- UI: http://localhost:8501
+- API docs: http://localhost:8000/docs
 
 ## Configuration
 Main env variables:
@@ -225,6 +278,17 @@ GitHub Actions validates:
 - Lint and format
 - Security checks
 - E2E smoke flow
+
+## Additional Guides
+- Development workflow: `docs/DEVELOPMENT.md`
+- Monitoring and observability: `docs/MONITORING.md`
+- Performance tuning: `docs/PERFORMANCE_TUNING.md`
+- Production deployment: `docs/DEPLOYMENT_PRODUCTION.md`
+- GIF recording checklist: `docs/gifs.md`
+
+## Infrastructure Manifests
+- Kubernetes API deployment/service: `deploy/k8s/api-deployment.yml`
+- Kubernetes UI deployment/service: `deploy/k8s/ui-deployment.yml`
 
 ## Reports and Exports
 - Executive PDF report generation.

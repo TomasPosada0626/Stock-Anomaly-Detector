@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -8,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from config import USE_SQLALCHEMY_REPOSITORIES
+from security.encryption import decrypt_value, encrypt_value
 
 try:
     from repositories.sqlalchemy_domain_repositories import SqlWatchlistRepository
@@ -28,6 +30,7 @@ class WatchlistService:
         use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES,
     ) -> None:
         self.db_path = db_path
+        self._encryption_key = os.getenv("DATA_ENCRYPTION_KEY", "")
         self._repo = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         if use_sqlalchemy and SqlWatchlistRepository is not None:
@@ -102,10 +105,13 @@ class WatchlistService:
         if self._repo is not None:
             self._repo.add_ticker(watchlist_id=watchlist_id, ticker=ticker)
             return
+        stored_ticker = ticker.upper()
+        if self._encryption_key:
+            stored_ticker = encrypt_value(stored_ticker, self._encryption_key)
         conn = self._conn()
         conn.execute(
             "INSERT OR IGNORE INTO watchlist_items (watchlist_id, ticker, created_at) VALUES (?, ?, ?)",
-            (watchlist_id, ticker.upper(), datetime.now(UTC).isoformat()),
+            (watchlist_id, stored_ticker, datetime.now(UTC).isoformat()),
         )
         conn.commit()
         conn.close()
@@ -115,9 +121,17 @@ class WatchlistService:
             self._repo.remove_ticker(watchlist_id=watchlist_id, ticker=ticker)
             return
         conn = self._conn()
+        plain = ticker.upper()
+        encrypted = (
+            encrypt_value(plain, self._encryption_key) if self._encryption_key else "__not_encrypted__"
+        )
         conn.execute(
             "DELETE FROM watchlist_items WHERE watchlist_id = ? AND ticker = ?",
-            (watchlist_id, ticker.upper()),
+            (watchlist_id, plain),
+        )
+        conn.execute(
+            "DELETE FROM watchlist_items WHERE watchlist_id = ? AND ticker = ?",
+            (watchlist_id, encrypted),
         )
         conn.commit()
         conn.close()
@@ -144,4 +158,10 @@ class WatchlistService:
             params=(watchlist_id,),
         )
         conn.close()
+        if not df.empty and self._encryption_key:
+            df["ticker"] = df["ticker"].apply(
+                lambda value: decrypt_value(value, self._encryption_key)
+                if isinstance(value, str) and value.startswith("qv_enc_v")
+                else value
+            )
         return df
