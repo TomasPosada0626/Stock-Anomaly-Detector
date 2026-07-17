@@ -106,19 +106,6 @@ Design principles:
   - Sharpe, Sortino, Maximum Drawdown, Volatility, Beta, Alpha, Correlation, VaR.
 - FastAPI layer for health checks and portfolio/alerts endpoints.
 
-## News Intelligence
-- Yes, this is absolutely possible and highly recommended.
-- Trigger: when an anomaly is detected for a ticker, fetch same-day finance news for that company.
-- Goal: provide context for anomaly interpretation and faster analyst decision-making.
-- Example flow:
-  - Tesla anomaly detected
-  - News retrieval for TSLA (same day window)
-  - Context shown in UI, for example: "Tesla announces new autonomous driving release."
-- Initial implementation does not require AI:
-  - Integrate a financial news API and map by ticker/company.
-  - Suggested providers: Finnhub, Alpha Vantage News, MarketAux, NewsAPI (finance-filtered queries).
-  - Add service module (for example `src/services/news_service.py`) plus UI panel in dashboard/anomaly views.
-
 ## Use Cases
 - Buy-side technical analysis workflow.
 - Retail portfolio monitoring and anomaly-based screening.
