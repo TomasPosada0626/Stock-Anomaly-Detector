@@ -20,6 +20,12 @@ QuantVision is a production-grade FinTech analytics platform built with Python a
 It provides anomaly detection, technical analysis, portfolio intelligence, risk analytics,
 alerts, and strategy backtesting in a modular architecture aligned with Clean Code and SOLID practices.
 
+## Live Demo
+- Application URL: https://stock-anomaly-detector-tomas.streamlit.app/
+
+## Author
+- Tomas Posada ([GitHub](https://github.com/TomasPosada0626))
+
 ## Product Vision
 QuantVision helps analysts and investors:
 - Monitor market behavior through professional dashboards.
@@ -115,6 +121,29 @@ python -m venv .venv
 pip install -r requirements.txt
 streamlit run src/app.py
 ```
+
+### Run Modes (Current)
+Frontend (Streamlit):
+```bash
+streamlit run src/app.py
+```
+
+API (FastAPI):
+```bash
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+```
+
+Scheduler worker (for cloud/background processing):
+```bash
+python scripts/run_scheduler.py
+```
+
+Recommended production flags for worker mode:
+- `SCHEDULER_WORKER_MODE=true`
+- `SCHEDULER_INTERVAL_MINUTES=15`
+- `SCHEDULER_MAX_CYCLES=0`
+- `SCHEDULER_MAX_CONSECUTIVE_FAILURES=10`
+- `SCHEDULER_HEARTBEAT_FILE=storage/logs/scheduler_heartbeat.json`
 
 ### Docker
 ```bash
