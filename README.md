@@ -32,15 +32,39 @@ Design principles:
 - Extensible modules for new asset classes and analytics features.
 
 ## Core Technologies
-- Python 3.11+
-- Streamlit
-- Pandas / NumPy
-- Plotly
-- Scikit-Learn
-- Prophet
-- yfinance
-- SQLite (persisted domain state)
-- bcrypt authentication hardening
+- Languages:
+  - Python 3.11+
+  - SQL (SQLite and PostgreSQL dialects via SQLAlchemy)
+- Application Frameworks:
+  - Streamlit (interactive product UI)
+  - FastAPI + Uvicorn (API layer and service endpoints)
+- Data and Quant Stack:
+  - Pandas, NumPy
+  - Scikit-Learn
+  - Prophet
+  - yfinance
+- Visualization and Reporting:
+  - Plotly
+  - Kaleido (image export pipeline)
+- Persistence and Data Access:
+  - SQLite (local/dev state)
+  - PostgreSQL (production persistence)
+  - SQLAlchemy (repository abstraction + schema migrations/versioning)
+- Scheduling and Operations:
+  - APScheduler
+  - Dedicated scheduler worker mode with heartbeat + restart policy controls
+- Security and Auth:
+  - bcrypt password hashing
+  - Session-based authentication and RBAC enforcement
+  - Login lockout controls + audit logging
+- Testing and Quality:
+  - pytest, pytest-cov
+  - Ruff, Black
+  - Bandit, pip-audit
+  - Playwright (E2E smoke)
+- Packaging and Runtime:
+  - Docker
+  - GitHub Actions (CI/CD)
 
 ## Feature Map
 - Authentication with secure sessions, lockout policy, and audit events.
