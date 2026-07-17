@@ -1,8 +1,15 @@
+# ruff: noqa: E402
 from __future__ import annotations
 
+import sys
 from datetime import datetime
+from pathlib import Path
 
 import streamlit as st
+
+SRC_DIR = str(Path(__file__).resolve().parent)
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
 from analytics.event_tracker import EventTracker
 from analytics.experimentation import ExperimentationService
