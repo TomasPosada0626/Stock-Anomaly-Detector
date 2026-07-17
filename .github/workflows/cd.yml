@@ -12,7 +12,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     env:
-      APP_URL: https://stock-anomaly-detector-tomas.streamlit.app/
+      APP_URL: https://quantvision-tomas.streamlit.app/
 
     steps:
       - name: Wait for app rollout
@@ -25,7 +25,7 @@ jobs:
             body_file=$(mktemp)
             status=$(curl -L -s -o "$body_file" -w "%{http_code}" "$APP_URL")
             if [ "$status" = "200" ]; then
-              if grep -Eq "Stock Anomaly Detector|streamlit" "$body_file"; then
+              if grep -Eiq "quantvision|streamlit" "$body_file"; then
                 echo "App is healthy (HTTP 200 + expected content)."
                 exit 0
               fi

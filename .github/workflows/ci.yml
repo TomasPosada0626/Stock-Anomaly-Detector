@@ -71,11 +71,11 @@ jobs:
 
       - name: Run Ruff
         run: |
-          ruff check src/services src/ui src/config tests
+          ruff check src/services src/ui src/config src/api src/repositories scripts tests
 
       - name: Run Black format check
         run: |
-          black --check src/services src/ui src/config tests src/app.py
+          black --check src/services src/ui src/config src/api src/repositories scripts tests src/app.py
 
   security:
     runs-on: ubuntu-latest
