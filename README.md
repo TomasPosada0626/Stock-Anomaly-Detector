@@ -23,7 +23,7 @@
 QuantVision is a production-grade financial intelligence platform that combines advanced ML anomaly detection, institutional-grade risk analytics, and portfolio management in one workflow; it detects market anomalies with 7 methods, runs realistic backtests, and manages automated alerts for quants, traders, and analysts.
 
 ## Quick Demo
-![QuantVision 20s Demo](docs/assets/gifs/quantvision-demo.gif)
+![QuantVision 30s Demo](docs/assets/gifs/quantvision-demo.gif)
 
 ## Featured Capabilities
 | Feature | Description | Value |
