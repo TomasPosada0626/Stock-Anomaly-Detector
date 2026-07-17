@@ -23,8 +23,8 @@ try:
         select,
     )
 except Exception:  # pragma: no cover - optional dependency
-    Boolean = Column = DateTime = Float = Integer = MetaData = String = Table = None  # type: ignore[assignment]
-    create_engine = delete = insert = select = None  # type: ignore[assignment]
+    Boolean = Column = DateTime = Float = Integer = MetaData = String = Table = None
+    create_engine = delete = insert = select = None
 
 
 class _BaseSqlRepository:

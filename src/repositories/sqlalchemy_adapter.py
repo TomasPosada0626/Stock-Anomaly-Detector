@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from config import DATABASE_URL
 from services.observability import get_logger
 
+_sqlalchemy_text: Any
+
 try:
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import create_engine
+    from sqlalchemy import text as _sqlalchemy_text_imported
     from sqlalchemy.engine import Engine
+    _sqlalchemy_text = _sqlalchemy_text_imported
 except Exception:  # pragma: no cover - optional dependency
-    Engine = object  # type: ignore[assignment]
-    create_engine = None  # type: ignore[assignment]
-    text = None  # type: ignore[assignment]
+    Engine = Any
+    create_engine = None
+    _sqlalchemy_text = None
 
 
 logger = get_logger("sqlalchemy_adapter")
@@ -63,7 +68,9 @@ class SqlAlchemyAdapter:
             )
         try:
             with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
+                if _sqlalchemy_text is None:
+                    raise RuntimeError("sqlalchemy text helper unavailable")
+                conn.execute(_sqlalchemy_text("SELECT 1"))
             return SqlHealth(
                 enabled=True,
                 available=True,

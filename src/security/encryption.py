@@ -4,12 +4,14 @@ import base64
 import hashlib
 import hmac
 import secrets
-from typing import Final
+from typing import Any, Final
 
 try:
-    from cryptography.fernet import Fernet
+    from cryptography.fernet import Fernet as _FernetClass
 except Exception:  # pragma: no cover - optional dependency
-    Fernet = None  # type: ignore[assignment]
+    _FernetClass = None
+
+Fernet: Any = _FernetClass
 
 _PREFIX: Final[str] = "qv_enc_v1:"
 _PREFIX_V2: Final[str] = "qv_enc_v2:"
@@ -76,7 +78,8 @@ def encrypt_data(data: str, key: str) -> str:
         # Fallback keeps compatibility in environments without cryptography.
         return encrypt_value(data, key)
     f = Fernet(key.encode("utf-8"))
-    return f.encrypt(data.encode("utf-8")).decode("utf-8")
+    encrypted_bytes = bytes(f.encrypt(data.encode("utf-8")))
+    return encrypted_bytes.decode("utf-8")
 
 
 def decrypt_data(encrypted: str, key: str) -> str:
@@ -84,4 +87,5 @@ def decrypt_data(encrypted: str, key: str) -> str:
     if Fernet is None:
         return decrypt_value(encrypted, key)
     f = Fernet(key.encode("utf-8"))
-    return f.decrypt(encrypted.encode("utf-8")).decode("utf-8")
+    decrypted_bytes = bytes(f.decrypt(encrypted.encode("utf-8")))
+    return decrypted_bytes.decode("utf-8")

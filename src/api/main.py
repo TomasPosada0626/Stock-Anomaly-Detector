@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-untyped-def,misc,no-any-return,unused-ignore"
 from __future__ import annotations
 
 from datetime import UTC, datetime

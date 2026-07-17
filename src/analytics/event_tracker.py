@@ -59,8 +59,8 @@ class EventTracker:
                 ),
             )
             conn.commit()
-            row_id = int(cur.lastrowid)
-        return row_id
+            row_id = cur.lastrowid
+        return int(row_id if row_id is not None else 0)
 
     def list_events(self, limit: int = 500) -> pd.DataFrame:
         with self._conn() as conn:

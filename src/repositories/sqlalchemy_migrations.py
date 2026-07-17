@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 try:
     from sqlalchemy import text
 except Exception:  # pragma: no cover - optional dependency
-    text = None  # type: ignore[assignment]
+    text = None
 
 LATEST_SCHEMA_VERSION = 2
 
@@ -14,7 +15,7 @@ def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _bootstrap_migrations_table(engine) -> None:
+def _bootstrap_migrations_table(engine: Any) -> None:
     assert text is not None
     with engine.begin() as conn:
         conn.execute(text("""
@@ -26,14 +27,14 @@ def _bootstrap_migrations_table(engine) -> None:
                 """))
 
 
-def _get_current_version(engine) -> int:
+def _get_current_version(engine: Any) -> int:
     assert text is not None
     with engine.begin() as conn:
         row = conn.execute(text("SELECT MAX(version) FROM schema_migrations")).first()
     return int(row[0]) if row and row[0] is not None else 0
 
 
-def _migration_1_create_domain_tables(engine) -> None:
+def _migration_1_create_domain_tables(engine: Any) -> None:
     assert text is not None
     statements = [
         """
@@ -108,7 +109,7 @@ def _migration_1_create_domain_tables(engine) -> None:
         )
 
 
-def _migration_2_add_performance_indexes(engine) -> None:
+def _migration_2_add_performance_indexes(engine: Any) -> None:
     assert text is not None
     statements = [
         "CREATE INDEX IF NOT EXISTS idx_portfolio_positions_user_ticker_date ON portfolio_positions (username, ticker, created_at)",
@@ -135,7 +136,7 @@ def _migration_2_add_performance_indexes(engine) -> None:
         )
 
 
-def explain_query_plan(engine, query: str) -> list[tuple]:
+def explain_query_plan(engine: Any, query: str) -> list[tuple[object, ...]]:
     """Return a portable query-plan snapshot for diagnostics in development environments."""
     if text is None:
         raise RuntimeError("SQLAlchemy dependency not available")
@@ -145,7 +146,7 @@ def explain_query_plan(engine, query: str) -> list[tuple]:
         return [tuple(row) for row in result.fetchall()]
 
 
-def ensure_domain_schema(engine, target_version: int = LATEST_SCHEMA_VERSION) -> int:
+def ensure_domain_schema(engine: Any, target_version: int = LATEST_SCHEMA_VERSION) -> int:
     if text is None:
         raise RuntimeError("SQLAlchemy dependency not available")
 

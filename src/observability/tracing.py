@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from services.observability import get_logger
 
@@ -26,7 +26,7 @@ def initialize_tracing(service_name: str = "quantvision-api") -> bool:
         return False
 
 
-def get_tracer(name: str):
+def get_tracer(name: str) -> Any | None:
     try:
         from opentelemetry import trace
 
@@ -35,14 +35,19 @@ def get_tracer(name: str):
         return None
 
 
-def trace_kv_span(tracer: Any, span_name: str, **attributes: Any):
+def trace_kv_span(tracer: Any, span_name: str, **attributes: Any) -> Any:
     if tracer is None:
 
         class _Noop:
-            def __enter__(self):
+            def __enter__(self) -> "_Noop":
                 return self
 
-            def __exit__(self, exc_type, exc_val, exc_tb):
+            def __exit__(
+                self,
+                exc_type: type[BaseException] | None,
+                exc_val: BaseException | None,
+                exc_tb: object,
+            ) -> Literal[False]:
                 return False
 
         return _Noop()
