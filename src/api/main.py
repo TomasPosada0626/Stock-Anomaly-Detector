@@ -206,7 +206,7 @@ def create_app(
         return decorator(path)
 
     def _limit(spec: str):
-        if limiter is None:
+        if limiter is None or not enable_rate_limit:
 
             def _passthrough(func):
                 return func
