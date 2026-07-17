@@ -12,12 +12,15 @@ import pandas as pd
 from config import USE_SQLALCHEMY_REPOSITORIES
 from security.encryption import decrypt_value, encrypt_value
 
+_SqlAlertsRepositoryFactory: Any
+
 try:
     from repositories.sqlalchemy_domain_repositories import (
-        SqlAlertsRepository as _SqlAlertsRepository,
+        SqlAlertsRepository as _SqlAlertsRepositoryImported,
     )
+    _SqlAlertsRepositoryFactory = _SqlAlertsRepositoryImported
 except Exception:  # pragma: no cover - optional dependency
-    _SqlAlertsRepository = None
+    _SqlAlertsRepositoryFactory = None
 
 
 @dataclass(frozen=True)
@@ -41,9 +44,9 @@ class AlertsService:
         self._encryption_key = os.getenv("DATA_ENCRYPTION_KEY", "")
         self._repo: Any = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        if use_sqlalchemy and _SqlAlertsRepository is not None:
+        if use_sqlalchemy and _SqlAlertsRepositoryFactory is not None:
             try:
-                self._repo = _SqlAlertsRepository()
+                self._repo = _SqlAlertsRepositoryFactory()
             except Exception:
                 self._repo = None
         self.initialize()

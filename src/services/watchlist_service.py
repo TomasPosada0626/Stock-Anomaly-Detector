@@ -12,12 +12,15 @@ import pandas as pd
 from config import USE_SQLALCHEMY_REPOSITORIES
 from security.encryption import decrypt_value, encrypt_value
 
+_SqlWatchlistRepositoryFactory: Any
+
 try:
     from repositories.sqlalchemy_domain_repositories import (
-        SqlWatchlistRepository as _SqlWatchlistRepository,
+        SqlWatchlistRepository as _SqlWatchlistRepositoryImported,
     )
+    _SqlWatchlistRepositoryFactory = _SqlWatchlistRepositoryImported
 except Exception:  # pragma: no cover - optional dependency
-    _SqlWatchlistRepository = None
+    _SqlWatchlistRepositoryFactory = None
 
 
 @dataclass(frozen=True)
@@ -38,9 +41,9 @@ class WatchlistService:
         self._encryption_key = os.getenv("DATA_ENCRYPTION_KEY", "")
         self._repo: Any = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        if use_sqlalchemy and _SqlWatchlistRepository is not None:
+        if use_sqlalchemy and _SqlWatchlistRepositoryFactory is not None:
             try:
-                self._repo = _SqlWatchlistRepository()
+                self._repo = _SqlWatchlistRepositoryFactory()
             except Exception:
                 self._repo = None
         self.initialize()

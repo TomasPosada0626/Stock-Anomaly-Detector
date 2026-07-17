@@ -10,12 +10,15 @@ import pandas as pd
 
 from config import USE_SQLALCHEMY_REPOSITORIES
 
+_SqlPortfolioRepositoryFactory: Any
+
 try:
     from repositories.sqlalchemy_domain_repositories import (
-        SqlPortfolioRepository as _SqlPortfolioRepository,
+        SqlPortfolioRepository as _SqlPortfolioRepositoryImported,
     )
+    _SqlPortfolioRepositoryFactory = _SqlPortfolioRepositoryImported
 except Exception:  # pragma: no cover - optional dependency
-    _SqlPortfolioRepository = None
+    _SqlPortfolioRepositoryFactory = None
 
 
 @dataclass(frozen=True)
@@ -39,9 +42,9 @@ class PortfolioService:
         self._repo: Any = None
         db_dir = Path(db_path).parent
         db_dir.mkdir(parents=True, exist_ok=True)
-        if use_sqlalchemy and _SqlPortfolioRepository is not None:
+        if use_sqlalchemy and _SqlPortfolioRepositoryFactory is not None:
             try:
-                self._repo = _SqlPortfolioRepository()
+                self._repo = _SqlPortfolioRepositoryFactory()
             except Exception:
                 self._repo = None
         self.initialize()
