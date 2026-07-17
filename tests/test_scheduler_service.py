@@ -87,3 +87,36 @@ def test_scheduler_start_returns_false_when_dependency_missing(monkeypatch, tmp_
     alerts = AlertsService(db_path=str(tmp_path / "qv.db"))
     scheduler = AlertScheduler(alerts, fetch_market_data=lambda _: pd.DataFrame())
     assert scheduler.start("alice", interval_minutes=5) is False
+
+
+def test_scheduler_evaluate_all_users_once(tmp_path) -> None:
+    db_path = str(tmp_path / "quantvision.db")
+    alerts = AlertsService(db_path=db_path)
+    alerts.create_rule(AlertRule(username="alice", ticker="AAPL", alert_type="new_high"))
+    alerts.create_rule(AlertRule(username="bob", ticker="AAPL", alert_type="new_high"))
+
+    idx = pd.date_range("2025-01-01", periods=5, freq="D")
+    market_df = pd.DataFrame({"Close": [100, 101, 102, 103, 104]}, index=idx)
+
+    scheduler = AlertScheduler(alerts, fetch_market_data=lambda _: market_df)
+    summary = scheduler.evaluate_all_users_once()
+    assert "alice" in summary
+    assert "bob" in summary
+
+
+def test_scheduler_run_continuous_stops_on_keyboard_interrupt(monkeypatch, tmp_path) -> None:
+    db_path = str(tmp_path / "quantvision.db")
+    alerts = AlertsService(db_path=db_path)
+    scheduler = AlertScheduler(alerts, fetch_market_data=lambda _: pd.DataFrame())
+
+    monkeypatch.setattr(scheduler, "evaluate_all_users_once", lambda: {"system": 0})
+
+    call_count = {"n": 0}
+
+    def fake_sleep(seconds: int):
+        call_count["n"] += 1
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(scheduler_module.time, "sleep", fake_sleep)
+    scheduler.run_continuous(interval_minutes=1)
+    assert call_count["n"] == 1

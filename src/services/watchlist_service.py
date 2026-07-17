@@ -7,6 +7,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from config import USE_SQLALCHEMY_REPOSITORIES
+
+try:
+    from repositories.sqlalchemy_domain_repositories import SqlWatchlistRepository
+except Exception:  # pragma: no cover - optional dependency
+    SqlWatchlistRepository = None  # type: ignore[assignment]
+
 
 @dataclass(frozen=True)
 class WatchlistInput:
@@ -15,15 +22,23 @@ class WatchlistInput:
 
 
 class WatchlistService:
-    def __init__(self, db_path: str = "storage/quantvision.db") -> None:
+    def __init__(self, db_path: str = "storage/quantvision.db", use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES) -> None:
         self.db_path = db_path
+        self._repo = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        if use_sqlalchemy and SqlWatchlistRepository is not None:
+            try:
+                self._repo = SqlWatchlistRepository()
+            except Exception:
+                self._repo = None
         self.initialize()
 
     def _conn(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path, check_same_thread=False)
 
     def initialize(self) -> None:
+        if self._repo is not None:
+            return
         conn = self._conn()
         conn.execute(
             """
@@ -52,6 +67,8 @@ class WatchlistService:
         conn.close()
 
     def create_watchlist(self, data: WatchlistInput) -> int:
+        if self._repo is not None:
+            return self._repo.create_watchlist(username=data.username, name=data.name)
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
@@ -67,6 +84,9 @@ class WatchlistService:
         return int(row[0])
 
     def delete_watchlist(self, watchlist_id: int, username: str) -> None:
+        if self._repo is not None:
+            self._repo.delete_watchlist(watchlist_id=watchlist_id, username=username)
+            return
         conn = self._conn()
         conn.execute(
             "DELETE FROM watchlist_items WHERE watchlist_id IN (SELECT id FROM watchlists WHERE id = ? AND username = ?)",
@@ -77,6 +97,9 @@ class WatchlistService:
         conn.close()
 
     def add_ticker(self, watchlist_id: int, ticker: str) -> None:
+        if self._repo is not None:
+            self._repo.add_ticker(watchlist_id=watchlist_id, ticker=ticker)
+            return
         conn = self._conn()
         conn.execute(
             "INSERT OR IGNORE INTO watchlist_items (watchlist_id, ticker, created_at) VALUES (?, ?, ?)",
@@ -86,6 +109,9 @@ class WatchlistService:
         conn.close()
 
     def remove_ticker(self, watchlist_id: int, ticker: str) -> None:
+        if self._repo is not None:
+            self._repo.remove_ticker(watchlist_id=watchlist_id, ticker=ticker)
+            return
         conn = self._conn()
         conn.execute(
             "DELETE FROM watchlist_items WHERE watchlist_id = ? AND ticker = ?",
@@ -95,6 +121,8 @@ class WatchlistService:
         conn.close()
 
     def list_watchlists(self, username: str) -> pd.DataFrame:
+        if self._repo is not None:
+            return self._repo.list_watchlists(username=username)
         conn = self._conn()
         df = pd.read_sql_query(
             "SELECT id, name, created_at FROM watchlists WHERE username = ? ORDER BY created_at ASC",
@@ -105,6 +133,8 @@ class WatchlistService:
         return df
 
     def list_items(self, watchlist_id: int) -> pd.DataFrame:
+        if self._repo is not None:
+            return self._repo.list_items(watchlist_id=watchlist_id)
         conn = self._conn()
         df = pd.read_sql_query(
             "SELECT ticker FROM watchlist_items WHERE watchlist_id = ? ORDER BY ticker ASC",

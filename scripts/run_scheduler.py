@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from config import SCHEDULER_INTERVAL_MINUTES
+from config import SCHEDULER_INTERVAL_MINUTES, SCHEDULER_RUN_CONTINUOUS
 from services.alerts_service import AlertsService
 from services.indicators_service import add_indicators
 from services.market_data_service import add_return_features, get_ticker_data
@@ -22,11 +22,18 @@ def main() -> None:
     scheduler = AlertScheduler(alerts, fetch_market_data=_fetch_market_frame)
     started = scheduler.start(username="system", interval_minutes=SCHEDULER_INTERVAL_MINUTES)
     if started:
-        print(f"QuantVision scheduler running every {SCHEDULER_INTERVAL_MINUTES} minute(s)")
-    else:
-        # Fallback for environments where APScheduler is unavailable.
-        triggered = scheduler.evaluate_alerts_once("system")
-        print(f"Scheduler dependency unavailable. Single pass executed: {triggered} alerts triggered")
+        print(f"QuantVision scheduler running every {SCHEDULER_INTERVAL_MINUTES} minute(s) with APScheduler")
+        return
+
+    if SCHEDULER_RUN_CONTINUOUS:
+        print(
+            f"APScheduler unavailable. Falling back to continuous loop every {SCHEDULER_INTERVAL_MINUTES} minute(s)."
+        )
+        scheduler.run_continuous(interval_minutes=SCHEDULER_INTERVAL_MINUTES)
+        return
+
+    summary = scheduler.evaluate_all_users_once()
+    print(f"Scheduler single pass summary: {summary}")
 
 
 if __name__ == "__main__":

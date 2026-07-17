@@ -35,6 +35,13 @@ def _resolve_project_path(value: str) -> str:
     return str((PROJECT_ROOT / path).resolve())
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 SESSION_TTL_MINUTES = _positive("SESSION_TTL_MINUTES", _int_env("SESSION_TTL_MINUTES", 60))
 MAX_FAILED_LOGIN_ATTEMPTS = _positive(
     "MAX_FAILED_LOGIN_ATTEMPTS", _int_env("MAX_FAILED_LOGIN_ATTEMPTS", 5)
@@ -49,6 +56,8 @@ SCHEDULER_INTERVAL_MINUTES = _positive(
 MARKET_DATA_CACHE_TTL_SECONDS = _positive(
     "MARKET_DATA_CACHE_TTL_SECONDS", _int_env("MARKET_DATA_CACHE_TTL_SECONDS", 900)
 )
+USE_SQLALCHEMY_REPOSITORIES = _bool_env("USE_SQLALCHEMY_REPOSITORIES", False)
+SCHEDULER_RUN_CONTINUOUS = _bool_env("SCHEDULER_RUN_CONTINUOUS", True)
 STREAMLIT_APP_URL = os.getenv(
     "STREAMLIT_APP_URL", "https://quantvision-tomas.streamlit.app/"
 )

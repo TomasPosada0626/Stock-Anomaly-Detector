@@ -78,6 +78,15 @@ After deployment:
 3. Load one ticker (for example `AAPL`).
 4. Confirm chart rendering and anomaly detection tabs.
 
+Scheduler runtime behavior:
+- Uses APScheduler interval execution when dependency is installed.
+- Falls back to continuous all-users loop when `SCHEDULER_RUN_CONTINUOUS=true`.
+- Runs one all-users evaluation pass and exits when `SCHEDULER_RUN_CONTINUOUS=false`.
+
+Persistence behavior:
+- `USE_SQLALCHEMY_REPOSITORIES=false` keeps SQLite-native service repositories.
+- `USE_SQLALCHEMY_REPOSITORIES=true` enables SQLAlchemy repositories and uses `DATABASE_URL`.
+
 ## 6. Current Deployment Status in This Repository
 
 Implemented:
@@ -90,3 +99,10 @@ Not yet implemented:
 - Automatic provider-side deploy trigger from GitHub Actions.
 - IaC templates (Terraform/Bicep/CloudFormation).
 - Provider-specific manifest files.
+
+## 7. Recommended Environment Variables
+
+- `SCHEDULER_INTERVAL_MINUTES=15`
+- `SCHEDULER_RUN_CONTINUOUS=true`
+- `USE_SQLALCHEMY_REPOSITORIES=false`
+- `DATABASE_URL=sqlite:///storage/quantvision.db`

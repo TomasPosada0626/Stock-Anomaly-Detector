@@ -7,6 +7,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from config import USE_SQLALCHEMY_REPOSITORIES
+
+try:
+    from repositories.sqlalchemy_domain_repositories import SqlPortfolioRepository
+except Exception:  # pragma: no cover - optional dependency
+    SqlPortfolioRepository = None  # type: ignore[assignment]
+
 
 @dataclass(frozen=True)
 class PositionInput:
@@ -18,16 +25,24 @@ class PositionInput:
 
 
 class PortfolioService:
-    def __init__(self, db_path: str = "storage/quantvision.db") -> None:
+    def __init__(self, db_path: str = "storage/quantvision.db", use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES) -> None:
         self.db_path = db_path
+        self._repo = None
         db_dir = Path(db_path).parent
         db_dir.mkdir(parents=True, exist_ok=True)
+        if use_sqlalchemy and SqlPortfolioRepository is not None:
+            try:
+                self._repo = SqlPortfolioRepository()
+            except Exception:
+                self._repo = None
         self.initialize()
 
     def _conn(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path, check_same_thread=False)
 
     def initialize(self) -> None:
+        if self._repo is not None:
+            return
         conn = self._conn()
         conn.execute(
             """
@@ -46,6 +61,14 @@ class PortfolioService:
         conn.close()
 
     def add_position(self, data: PositionInput) -> int:
+        if self._repo is not None:
+            return self._repo.add_position(
+                username=data.username,
+                ticker=data.ticker,
+                quantity=float(data.quantity),
+                buy_price=float(data.buy_price),
+                buy_date=data.buy_date,
+            )
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(
@@ -68,6 +91,9 @@ class PortfolioService:
         return row_id
 
     def remove_position(self, position_id: int, username: str) -> None:
+        if self._repo is not None:
+            self._repo.remove_position(position_id=position_id, username=username)
+            return
         conn = self._conn()
         conn.execute(
             "DELETE FROM portfolio_positions WHERE id = ? AND username = ?",
@@ -77,6 +103,8 @@ class PortfolioService:
         conn.close()
 
     def list_positions(self, username: str) -> pd.DataFrame:
+        if self._repo is not None:
+            return self._repo.list_positions(username=username)
         conn = self._conn()
         df = pd.read_sql_query(
             "SELECT id, ticker, quantity, buy_price, buy_date FROM portfolio_positions WHERE username = ? ORDER BY buy_date ASC",

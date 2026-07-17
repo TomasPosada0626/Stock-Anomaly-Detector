@@ -94,10 +94,23 @@ Main env variables:
 - `SESSION_TTL_MINUTES`
 - `MAX_FAILED_LOGIN_ATTEMPTS`
 - `LOCKOUT_MINUTES`
+- `SCHEDULER_INTERVAL_MINUTES`
+- `SCHEDULER_RUN_CONTINUOUS`
+- `USE_SQLALCHEMY_REPOSITORIES`
+- `DATABASE_URL`
 
 Reference examples:
 - `config/env/.env.development.example`
 - `config/env/.env.production.example`
+
+Persistence mode:
+- `USE_SQLALCHEMY_REPOSITORIES=false`: SQLite-native repositories in service layer.
+- `USE_SQLALCHEMY_REPOSITORIES=true`: SQLAlchemy repositories via `DATABASE_URL`.
+
+Scheduler fallback mode:
+- APScheduler available: interval jobs in process.
+- APScheduler unavailable and `SCHEDULER_RUN_CONTINUOUS=true`: continuous all-users loop.
+- APScheduler unavailable and `SCHEDULER_RUN_CONTINUOUS=false`: single all-users pass and exit.
 
 ## Security
 - Password hashing via bcrypt.
@@ -137,9 +150,23 @@ FastAPI entrypoint:
 
 Current endpoints:
 - `GET /health`
+- `GET /health/detailed`
+- `GET /metrics`
 - `GET /users/{username}/role`
 - `GET /users/{username}/portfolio/summary`
+- `GET /users/{username}/portfolio/positions`
+- `POST /users/{username}/portfolio/positions`
+- `DELETE /users/{username}/portfolio/positions/{position_id}`
 - `GET /users/{username}/alerts/history`
+- `GET /users/{username}/alerts/rules`
+- `POST /users/{username}/alerts/rules`
+- `DELETE /users/{username}/alerts/rules/{rule_id}`
+- `GET /users/{username}/watchlists`
+- `POST /users/{username}/watchlists`
+- `DELETE /users/{username}/watchlists/{watchlist_id}`
+- `GET /users/{username}/watchlists/{watchlist_id}/items`
+- `POST /users/{username}/watchlists/{watchlist_id}/items`
+- `DELETE /users/{username}/watchlists/{watchlist_id}/items/{ticker}`
 
 ## Deployment
 See:

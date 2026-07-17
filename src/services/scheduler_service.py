@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Callable
 
 import pandas as pd
@@ -77,6 +78,24 @@ class AlertScheduler:
         )
         self.scheduler.start()
         return True
+
+    def evaluate_all_users_once(self) -> dict[str, int]:
+        owners = self.alerts_service.list_rule_owners()
+        summary: dict[str, int] = {}
+        for username in owners:
+            summary[username] = self.evaluate_alerts_once(username)
+        self.logger.info("scheduled_alert_evaluation_all summary=%s", summary)
+        return summary
+
+    def run_continuous(self, interval_minutes: int = 15) -> None:
+        wait_seconds = max(1, int(interval_minutes)) * 60
+        self.logger.info("scheduler_continuous_started interval_seconds=%s", wait_seconds)
+        try:
+            while True:
+                self.evaluate_all_users_once()
+                time.sleep(wait_seconds)
+        except KeyboardInterrupt:
+            self.logger.info("scheduler_continuous_stopped")
 
     def stop(self) -> None:
         if self.scheduler and self.scheduler.running:

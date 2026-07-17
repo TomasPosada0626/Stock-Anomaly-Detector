@@ -42,6 +42,20 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
 
             return decorator
 
+        def post(self, path: str):
+            def decorator(func):
+                self.routes[f"POST {path}"] = func
+                return func
+
+            return decorator
+
+        def delete(self, path: str):
+            def decorator(func):
+                self.routes[f"DELETE {path}"] = func
+                return func
+
+            return decorator
+
     class FakeAuth:
         def get_user_role(self, username: str) -> str:
             return "ANALYST"
@@ -56,9 +70,24 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
         def list_positions(self, username: str):
             return pd.DataFrame([{"ticker": "AAPL", "quantity": 2, "buy_price": 95}])
 
+        def add_position(self, data):
+            return 99
+
+        def remove_position(self, position_id: int, username: str):
+            return None
+
     class FakeAlerts:
         def list_history(self, username: str, limit: int = 100):
             return pd.DataFrame([{"ticker": "AAPL", "alert_type": "rsi_gt_70", "message": "x"}])
+
+        def list_rules(self, username: str):
+            return pd.DataFrame([{"id": 5, "ticker": "AAPL", "alert_type": "rsi_gt_70", "active": 1}])
+
+        def create_rule(self, rule):
+            return 5
+
+        def delete_rule(self, rule_id: int, username: str):
+            return None
 
     class FakeWatchlists:
         def list_watchlists(self, username: str):
@@ -66,6 +95,18 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
 
         def list_items(self, watchlist_id: int):
             return pd.DataFrame([{"ticker": "AAPL"}, {"ticker": "MSFT"}])
+
+        def create_watchlist(self, data):
+            return 1
+
+        def delete_watchlist(self, watchlist_id: int, username: str):
+            return None
+
+        def add_ticker(self, watchlist_id: int, ticker: str):
+            return None
+
+        def remove_ticker(self, watchlist_id: int, ticker: str):
+            return None
 
     class FakeReports:
         def build_portfolio_report(self, title: str, portfolio_metrics, positions):
@@ -124,6 +165,41 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
 
     report = app.routes["/users/{username}/reports/portfolio"]("alice", prices="AAPL:100")
     assert report["pdf_bytes"] == 3
+
+    positions = app.routes["/users/{username}/portfolio/positions"]("alice")
+    assert len(positions) == 1
+
+    payload_position = type("PositionPayload", (), {"ticker": "AAPL", "quantity": 1.0, "buy_price": 100.0, "buy_date": "2026-01-01"})()
+    created_position = app.routes["POST /users/{username}/portfolio/positions"]("alice", payload=payload_position)
+    assert created_position["id"] == 99
+
+    deleted_position = app.routes["DELETE /users/{username}/portfolio/positions/{position_id}"]("alice", position_id=99)
+    assert deleted_position["deleted"] is True
+
+    rules = app.routes["/users/{username}/alerts/rules"]("alice")
+    assert len(rules) == 1
+
+    payload_rule = type("RulePayload", (), {"ticker": "AAPL", "alert_type": "rsi_gt_70", "threshold": None, "active": True})()
+    created_rule = app.routes["POST /users/{username}/alerts/rules"]("alice", payload=payload_rule)
+    assert created_rule["id"] == 5
+
+    deleted_rule = app.routes["DELETE /users/{username}/alerts/rules/{rule_id}"]("alice", rule_id=5)
+    assert deleted_rule["deleted"] is True
+
+    payload_watchlist = type("WatchlistPayload", (), {"name": "Tech"})()
+    created_watchlist = app.routes["POST /users/{username}/watchlists"]("alice", payload=payload_watchlist)
+    assert created_watchlist["id"] == 1
+
+    payload_item = type("ItemPayload", (), {"ticker": "NVDA"})()
+    added_item = app.routes["POST /users/{username}/watchlists/{watchlist_id}/items"]("alice", watchlist_id=1, payload=payload_item)
+    assert added_item["added"] is True
+
+    removed_item = app.routes["DELETE /users/{username}/watchlists/{watchlist_id}/items/{ticker}"](
+        "alice",
+        watchlist_id=1,
+        ticker="NVDA",
+    )
+    assert removed_item["deleted"] is True
 
     metrics = app.routes["/metrics"]()
     assert "counters" in metrics
