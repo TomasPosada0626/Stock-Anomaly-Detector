@@ -61,6 +61,10 @@ def create_app(
 
     app = FastAPI(title="QuantVision API", version="1.0.0")
 
+    def _authorize_module(username: str, module_name: str) -> None:
+        if not auth.can_access_module(username, module_name):
+            raise HTTPException(status_code=403, detail=f"forbidden: role cannot access {module_name}")
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "quantvision-api"}
@@ -79,11 +83,13 @@ def create_app(
 
     @app.get("/users/{username}/portfolio/summary")
     def portfolio_summary(username: str, prices: str = "") -> dict[str, float]:
+        _authorize_module(username, "Portfolio")
         price_map = parse_prices(prices)
         return portfolio.compute_portfolio_metrics(username, latest_prices=price_map)
 
     @app.get("/users/{username}/alerts/history")
     def alerts_history(username: str, limit: int = 100):
+        _authorize_module(username, "Alerts")
         if limit <= 0:
             raise HTTPException(status_code=400, detail="limit must be positive")
         frame = alerts.list_history(username, limit=limit)
@@ -91,11 +97,13 @@ def create_app(
 
     @app.get("/users/{username}/watchlists")
     def user_watchlists(username: str):
+        _authorize_module(username, "Watchlists")
         frame = watchlists.list_watchlists(username)
         return frame.to_dict(orient="records")
 
     @app.get("/users/{username}/watchlists/{watchlist_id}/items")
     def user_watchlist_items(username: str, watchlist_id: int):
+        _authorize_module(username, "Watchlists")
         existing = watchlists.list_watchlists(username)
         if watchlist_id not in existing.get("id", pd.Series(dtype=int)).tolist():
             raise HTTPException(status_code=404, detail="watchlist not found")
@@ -159,6 +167,7 @@ def create_app(
 
     @app.get("/users/{username}/reports/portfolio")
     def portfolio_report(username: str, prices: str = ""):
+        _authorize_module(username, "Reports")
         summary = portfolio.compute_portfolio_metrics(username, latest_prices=parse_prices(prices))
         positions = portfolio.list_positions(username)
         pdf = reports.build_portfolio_report(

@@ -3,7 +3,8 @@
 ## General
 
 **What does this app do?**
-It detects anomalies in historical stock prices using statistical and machine learning methods.
+QuantVision is an intelligent financial analytics platform for market monitoring, anomaly detection,
+technical analysis, portfolio tracking, alerts, risk analytics, reporting, and backtesting.
 
 **Which methods are available?**
 - Z-Score
@@ -11,6 +12,14 @@ It detects anomalies in historical stock prices using statistical and machine le
 - DBSCAN
 - Prophet
 - Rolling Quantile
+- Local Outlier Factor (LOF)
+- One-Class SVM
+
+**Which technical indicators are available?**
+- RSI, MACD, SMA, EMA
+- Bollinger Bands, VWAP
+- ATR, ADX
+- Ichimoku Cloud, OBV, Stochastic Oscillator
 
 **Can I analyze more than one ticker?**
 Yes. You can select multiple predefined tickers and add custom tickers.
@@ -25,7 +34,10 @@ Yes. Use the sidebar uploader. Include at least date/time and price columns.
 2. Start app: `streamlit run src/app.py`
 
 **How do I run tests?**
-Run `pytest tests/tests.py` from repository root.
+Run `pytest` from repository root.
+
+**How do I run quality checks?**
+Run `ruff check src/services src/ui src/config tests src/api src/repositories scripts`.
 
 ## Deployment
 
@@ -37,7 +49,13 @@ Yes. Docker deployment is ready, and cloud deployment is documented.
 - Run: `docker run -p 8501:8501 quantvision`
 
 **Is there CI/CD?**
-Not yet. Deployment is currently manual.
+Yes. CI validates tests, coverage, linting, and quality gates.
+
+**Is there an API layer?**
+Yes. FastAPI endpoints are available in `src/api/main.py`.
+
+**Is there a scheduler for alerts?**
+Yes. Use `python scripts/run_scheduler.py` or Task `scheduler:run`.
 
 ## Security and Sessions
 
@@ -45,7 +63,8 @@ Not yet. Deployment is currently manual.
 Passwords are hashed with bcrypt before storage.
 
 **Where is user data stored?**
-In a local SQLite database file (`users.db`).
+In local SQLite databases by default (`storage/users.db` and `storage/quantvision.db`).
+Optional SQLAlchemy adapter support is available via `DATABASE_URL`.
 
 ## Troubleshooting
 
@@ -57,6 +76,12 @@ Verify Plotly + Kaleido are installed and compatible.
 
 **Streamlit does not start.**
 Confirm virtual environment activation and dependency installation.
+
+**How do I run the scheduler manually?**
+`python scripts/run_scheduler.py`
+
+**How do I verify platform health?**
+Use API endpoints `/health` and `/health/detailed`.
 
 ## Contact
 

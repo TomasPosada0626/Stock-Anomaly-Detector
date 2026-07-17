@@ -46,6 +46,9 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
         def get_user_role(self, username: str) -> str:
             return "ANALYST"
 
+        def can_access_module(self, username: str, module_name: str) -> bool:
+            return True
+
     class FakePortfolio:
         def compute_portfolio_metrics(self, username: str, latest_prices):
             return {"Invested Capital": 100.0, "Current Value": 110.0, "PnL": 10.0, "ROI %": 10.0}
@@ -135,3 +138,40 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
         caught = True
         assert exc.status_code == 400
     assert caught is True
+
+
+def test_create_app_forbidden_by_rbac(monkeypatch) -> None:
+    class FakeApp:
+        def __init__(self, title: str, version: str):
+            self.routes = {}
+
+        def get(self, path: str):
+            def decorator(func):
+                self.routes[path] = func
+                return func
+
+            return decorator
+
+    class FakeAuth:
+        def get_user_role(self, username: str) -> str:
+            return "GUEST"
+
+        def can_access_module(self, username: str, module_name: str) -> bool:
+            return False
+
+    class FakeHTTPException(Exception):
+        def __init__(self, status_code: int, detail: str):
+            super().__init__(detail)
+            self.status_code = status_code
+
+    monkeypatch.setattr(api_main, "FastAPI", FakeApp)
+    monkeypatch.setattr(api_main, "HTTPException", FakeHTTPException)
+
+    app = api_main.create_app(FakeAuth())
+    denied = False
+    try:
+        app.routes["/users/{username}/portfolio/summary"]("guest")
+    except FakeHTTPException as exc:
+        denied = True
+        assert exc.status_code == 403
+    assert denied is True
