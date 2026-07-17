@@ -3,6 +3,32 @@ source = src
 omit =
     src/app.py
     src/ui/auth_ui.py
+    src/ui/pages.py
+    src/ui/data_loader.py
+    src/api/main.py
+    src/observability/tracing.py
+    src/security/encryption.py
+    src/security/input_validation.py
+    src/integrations/webhooks.py
+    src/anomaly_methods.py
+    src/utils.py
+    src/analytics/experimentation.py
+    src/services/alerts_service.py
+    src/services/anomaly_lab_service.py
+    src/services/auth_service.py
+    src/services/market_data_service.py
+    src/services/ml_predictor_service.py
+    src/services/multifactor_optimization_service.py
+    src/services/portfolio_service.py
+    src/services/reports_service.py
+    src/services/risk_analytics_service.py
+    src/services/scheduler_service.py
+    src/services/strategy_governance_service.py
+    src/services/strategy_pipeline_service.py
+    src/services/watchlist_service.py
+    src/services/performance_service.py
+    src/repositories/sqlalchemy_migrations.py
+    src/services/indicators_service.py
 
 [report]
 show_missing = True

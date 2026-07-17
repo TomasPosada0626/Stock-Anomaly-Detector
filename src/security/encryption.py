@@ -6,6 +6,11 @@ import hmac
 import secrets
 from typing import Final
 
+try:
+    from cryptography.fernet import Fernet
+except Exception:  # pragma: no cover - optional dependency
+    Fernet = None  # type: ignore[assignment]
+
 _PREFIX: Final[str] = "qv_enc_v1:"
 _PREFIX_V2: Final[str] = "qv_enc_v2:"
 
@@ -63,3 +68,20 @@ def decrypt_value(token: str, secret: str) -> str:
     if token.startswith(_PREFIX):
         return _decrypt_v1(token, secret)
     raise ValueError("invalid token format")
+
+
+def encrypt_data(data: str, key: str) -> str:
+    """Encrypt data at rest using Fernet-compatible keys."""
+    if Fernet is None:
+        # Fallback keeps compatibility in environments without cryptography.
+        return encrypt_value(data, key)
+    f = Fernet(key.encode("utf-8"))
+    return f.encrypt(data.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_data(encrypted: str, key: str) -> str:
+    """Decrypt data at rest using Fernet-compatible keys."""
+    if Fernet is None:
+        return decrypt_value(encrypted, key)
+    f = Fernet(key.encode("utf-8"))
+    return f.decrypt(encrypted.encode("utf-8")).decode("utf-8")

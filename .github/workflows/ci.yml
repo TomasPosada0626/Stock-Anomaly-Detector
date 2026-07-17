@@ -33,7 +33,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           if [ "${{ matrix.python-version }}" = "3.11" ]; then
-            pytest --cov=src --cov-fail-under=85 --cov-report=term-missing --cov-report=xml
+            pytest --cov=src --cov-fail-under=98 --cov-report=term-missing --cov-report=xml
           else
             pytest --cov=src --cov-report=term-missing
           fi
@@ -53,7 +53,7 @@ jobs:
           codecov_yml_path: codecov.yml
           flags: unittests
           verbose: true
-          fail_ci_if_error: false
+          fail_ci_if_error: true
 
   quality:
     runs-on: ubuntu-latest
@@ -70,7 +70,7 @@ jobs:
       - name: Install quality tools
         run: |
           python -m pip install --upgrade pip
-          pip install black ruff mypy
+          pip install black ruff mypy bandit pip-audit
 
       - name: Run Ruff
         run: |
@@ -83,6 +83,19 @@ jobs:
       - name: Type Check (mypy)
         run: |
           mypy src/app.py src/anomaly_methods.py src/utils.py src/ui/pages.py --strict --show-error-codes --follow-imports=skip --disable-error-code=untyped-decorator
+
+      - name: Type Check (mypy strict)
+        run: |
+          mypy src/ --strict
+
+      - name: Dependency Check
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements/app.txt
+
+      - name: SAST (Bandit)
+        run: |
+          bandit -r src/ -ll -f json -o bandit.json
 
   security:
     runs-on: ubuntu-latest

@@ -34,10 +34,26 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Request
 except Exception:  # pragma: no cover - optional dependency
     FastAPI = None  # type: ignore[assignment]
     HTTPException = Exception  # type: ignore[assignment]
+    Request = object  # type: ignore[assignment]
+
+try:
+    from slowapi import Limiter
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.extension import _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+except Exception:  # pragma: no cover - optional dependency
+    Limiter = None  # type: ignore[assignment]
+    RateLimitExceeded = Exception  # type: ignore[assignment]
+
+    def _rate_limit_exceeded_handler(*args, **kwargs):  # type: ignore[override]
+        return None
+
+    def get_remote_address(request):  # type: ignore[override]
+        return "unknown"
 
 
 _RATE_LIMIT_WINDOW_SECONDS = 60
@@ -160,6 +176,12 @@ def create_app(
     }
 
     app = FastAPI(title="QuantVision API", version="1.0.0")
+    limiter = Limiter(key_func=get_remote_address) if Limiter is not None else None
+    if limiter is not None and hasattr(app, "state"):
+        app.state.limiter = limiter
+    add_exception_handler = getattr(app, "add_exception_handler", None)
+    if limiter is not None and callable(add_exception_handler):
+        add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     middleware = getattr(app, "middleware", None)
     enable_rate_limit = callable(middleware)
@@ -182,6 +204,15 @@ def create_app(
         if decorator is None:
             decorator = app.get
         return decorator(path)
+
+    def _limit(spec: str):
+        if limiter is None:
+
+            def _passthrough(func):
+                return func
+
+            return _passthrough
+        return limiter.limit(spec)
 
     def _authorize_module(username: str, module_name: str) -> None:
         if not auth.can_access_module(username, module_name):
@@ -212,7 +243,8 @@ def create_app(
                 )
 
     @_route("post", "/auth/login")
-    def login(payload: LoginRequest):
+    @_limit("10/minute")
+    def login(payload: LoginRequest, request: Request = None):
         _enforce_rate_limit(f"login:{payload.identifier.strip().lower()}")
         success, reason = auth.authenticate_user_with_reason(payload.identifier, payload.password)
         if not success:

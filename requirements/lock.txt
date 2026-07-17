@@ -18,6 +18,9 @@ fastapi==0.116.1
 uvicorn==0.35.0
 apscheduler==3.11.1
 pydantic==2.11.7
+slowapi==0.1.9
+cryptography==44.0.3
+prometheus-client==0.21.1
 SQLAlchemy==2.0.44
 psycopg==3.2.9
 psycopg-binary==3.2.9

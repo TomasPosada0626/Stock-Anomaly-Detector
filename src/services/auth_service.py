@@ -268,6 +268,11 @@ class AuthService:
         pattern = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$"
         return re.match(pattern, password)
 
+    @staticmethod
+    def _contains_html_payload(value: str) -> bool:
+        lowered = value.lower()
+        return "<" in lowered or ">" in lowered or "script" in lowered
+
     def is_username_available(self, username: str) -> bool:
         conn = self.get_connection()
         try:
@@ -305,6 +310,13 @@ class AuthService:
         role_clean = role.strip().upper() if role else "ANALYST"
         if role_clean not in ALLOWED_ROLES:
             role_clean = "ANALYST"
+        unsafe_fields = [username_clean, email_clean, first_name_clean, last_name_clean]
+        if any(self._contains_html_payload(field) for field in unsafe_fields):
+            self._record_audit(
+                "register", username_clean or email_clean, False, "invalid characters"
+            )
+            self.logger.warning("register_rejected_html_payload identifier=%s", username_clean)
+            return False, "Registration contains invalid characters."
 
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -381,39 +393,37 @@ class AuthService:
             self.logger.warning("login_locked identifier=%s remaining=%s", identifier, remaining)
             return False, f"Too many failed attempts. Try again in {remaining} minute(s)."
 
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT password FROM users WHERE username=? OR lower(email)=lower(?)",
-            (identifier, identifier),
-        )
-        row = cursor.fetchone()
-        if not row:
-            conn.close()
-            self._register_failed_attempt(identifier)
-            self._record_audit("login", identifier, False, "unknown identifier")
-            self.logger.warning("login_unknown_identifier identifier=%s", identifier)
-            return False, "Invalid username/email or password."
-
-        stored_hash = row[0]
-        password_to_verify = password
-        password_ok = self.verify_password(password_to_verify, stored_hash)
-        if not password_ok:
-            stripped_password = password.strip()
-            if stripped_password != password:
-                # Accept accidental surrounding whitespace from browser autofill/copy-paste.
-                password_ok = self.verify_password(stripped_password, stored_hash)
-                if password_ok:
-                    password_to_verify = stripped_password
-
-        if password_ok and not stored_hash.startswith("$2"):
+        password_ok = False
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute(
-                "UPDATE users SET password=? WHERE username=? OR lower(email)=lower(?)",
-                (self.hash_password(password_to_verify), identifier, identifier),
+                "SELECT password FROM users WHERE username=? OR lower(email)=lower(?)",
+                (identifier, identifier),
             )
-            conn.commit()
+            row = cursor.fetchone()
+            if not row:
+                self._register_failed_attempt(identifier)
+                self._record_audit("login", identifier, False, "unknown identifier")
+                self.logger.warning("login_unknown_identifier identifier=%s", identifier)
+                return False, "Invalid username/email or password."
 
-        conn.close()
+            stored_hash = row[0]
+            password_to_verify = password
+            password_ok = self.verify_password(password_to_verify, stored_hash)
+            if not password_ok:
+                stripped_password = password.strip()
+                if stripped_password != password:
+                    # Accept accidental surrounding whitespace from browser autofill/copy-paste.
+                    password_ok = self.verify_password(stripped_password, stored_hash)
+                    if password_ok:
+                        password_to_verify = stripped_password
+
+            if password_ok and not stored_hash.startswith("$2"):
+                cursor.execute(
+                    "UPDATE users SET password=? WHERE username=? OR lower(email)=lower(?)",
+                    (self.hash_password(password_to_verify), identifier, identifier),
+                )
+                conn.commit()
 
         if not password_ok:
             self._register_failed_attempt(identifier)
@@ -468,22 +478,22 @@ class AuthService:
         role_clean = role.strip().upper()
         if role_clean not in ALLOWED_ROLES:
             return False
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET role=? WHERE username=?", (role_clean, username.strip()))
-        updated = cursor.rowcount if cursor.rowcount is not None else 0
-        conn.commit()
-        conn.close()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE users SET role=? WHERE username=?", (role_clean, username.strip())
+            )
+            updated = cursor.rowcount if cursor.rowcount is not None else 0
+            conn.commit()
         if updated:
             self._record_audit("role_update", username, True, f"role={role_clean}")
         return updated > 0
 
     def list_users(self) -> list[tuple[str, str, str]]:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT username, email, role FROM users ORDER BY username ASC")
-        rows = cursor.fetchall()
-        conn.close()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, email, role FROM users ORDER BY username ASC")
+            rows = cursor.fetchall()
         return [(str(r[0]), str(r[1]), str(r[2]).upper()) for r in rows]
 
     def can_access_module(self, username: str, module_name: str) -> bool:
@@ -505,26 +515,24 @@ class AuthService:
         session_id = secrets.token_hex(32)
         now = self._utcnow()
         expires_at = (now + timedelta(minutes=ttl_minutes)).isoformat()
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        if invalidate_existing:
-            cursor.execute("DELETE FROM sessions WHERE username=?", (username,))
-        cursor.execute(
-            "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
-            (session_id, username, now.isoformat(), expires_at),
-        )
-        conn.commit()
-        conn.close()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if invalidate_existing:
+                cursor.execute("DELETE FROM sessions WHERE username=?", (username,))
+            cursor.execute(
+                "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
+                (session_id, username, now.isoformat(), expires_at),
+            )
+            conn.commit()
         self._record_audit("session_create", username, True, "session created")
         self.logger.info("session_create username=%s", username)
         return session_id
 
     def is_session_valid(self, session_id: str) -> bool:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT expires_at FROM sessions WHERE session_id=?", (session_id,))
-        row = cursor.fetchone()
-        conn.close()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT expires_at FROM sessions WHERE session_id=?", (session_id,))
+            row = cursor.fetchone()
         if not row or not row[0]:
             return False
         try:
@@ -534,14 +542,13 @@ class AuthService:
         return expires_at > self._utcnow()
 
     def get_session_username(self, session_id: str) -> Optional[str]:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT username, expires_at FROM sessions WHERE session_id=?",
-            (session_id,),
-        )
-        row = cursor.fetchone()
-        conn.close()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT username, expires_at FROM sessions WHERE session_id=?",
+                (session_id,),
+            )
+            row = cursor.fetchone()
         if not row:
             return None
         username = str(row[0]) if row[0] else ""
@@ -563,23 +570,21 @@ class AuthService:
         return session_username == username.strip()
 
     def invalidate_session(self, session_id: str) -> None:
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
-        conn.commit()
-        conn.close()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
+            conn.commit()
         self._record_audit("session_invalidate", session_id, True, "session invalidated")
 
     def cleanup_expired_sessions(self) -> int:
         now = self._utcnow().isoformat()
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= ?", (now,)
-        )
-        deleted = cursor.rowcount if cursor.rowcount is not None else 0
-        conn.commit()
-        conn.close()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= ?", (now,)
+            )
+            deleted = cursor.rowcount if cursor.rowcount is not None else 0
+            conn.commit()
         if deleted:
             self.logger.info("session_cleanup deleted=%s", deleted)
         return deleted

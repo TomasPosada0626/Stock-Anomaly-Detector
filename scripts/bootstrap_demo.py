@@ -35,9 +35,9 @@ def ensure_demo_data(tickers: list[str]) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Bootstrap demo user and optional data.")
-    parser.add_argument("--username", default="demo_user")
-    parser.add_argument("--email", default="demo@example.com")
-    parser.add_argument("--password", default="DemoUser*123")
+    parser.add_argument("--username", default="demo")
+    parser.add_argument("--email", default="demo@quantvision.dev")
+    parser.add_argument("--password", default="Demo123!@")
     parser.add_argument("--with-data", action="store_true")
     parser.add_argument("--tickers", default="AAPL,MSFT,GOOGL")
     args = parser.parse_args()

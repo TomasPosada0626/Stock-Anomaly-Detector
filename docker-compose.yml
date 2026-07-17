@@ -1,69 +1,25 @@
-version: "3.9"
+version: '3.9'
 
 services:
-  streamlit:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: streamlit run src/app.py --server.address=0.0.0.0 --server.port=8501
-    environment:
-      ENVIRONMENT: development
-      STREAMLIT_SERVER_HEADLESS: "true"
-      USE_SQLALCHEMY_REPOSITORIES: "true"
-      DATABASE_URL: postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
-      REDIS_URL: redis://redis:6379/0
-      SCHEDULER_WORKER_MODE: "false"
+  app:
+    build: .
     ports:
       - "8501:8501"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./:/app
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
     environment:
-      ENVIRONMENT: development
-      USE_SQLALCHEMY_REPOSITORIES: "true"
-      DATABASE_URL: postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
+      - USE_SQLALCHEMY_REPOSITORIES=true
+      - SCHEDULER_WORKER_MODE=false
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
     volumes:
-      - ./:/app
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: python scripts/run_scheduler.py
-    environment:
-      ENVIRONMENT: development
-      USE_SQLALCHEMY_REPOSITORIES: "true"
-      DATABASE_URL: postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
-      REDIS_URL: redis://redis:6379/0
-      SCHEDULER_WORKER_MODE: "true"
-      SCHEDULER_INTERVAL_MINUTES: "15"
-      SCHEDULER_MAX_CYCLES: "0"
-      SCHEDULER_MAX_CONSECUTIVE_FAILURES: "10"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./:/app
+      - ./data:/app/data
+      - ./storage:/app/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   postgres:
     image: postgres:16-alpine
@@ -76,20 +32,35 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U quantvision -d quantvision"]
+      test: ["CMD-SHELL", "pg_isready -U quantvision"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
+  scheduler:
+    build: .
+    command: python scripts/run_scheduler.py
+    environment:
+      - ENVIRONMENT=development
+      - SCHEDULER_WORKER_MODE=true
+      - SCHEDULER_INTERVAL_MINUTES=5
+      - DATABASE_URL=postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
+      - USE_SQLALCHEMY_REPOSITORIES=true
+    depends_on:
+      - postgres
+    volumes:
+      - ./storage:/app/storage
+
+  api:
+    build: .
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg://quantvision:quantvision@postgres:5432/quantvision
+      - USE_SQLALCHEMY_REPOSITORIES=true
+    depends_on:
+      - postgres
 
 volumes:
   postgres_data:

@@ -1,8 +1,13 @@
 ﻿# QuantVision
 
-[![CI](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml?query=branch%3Amain)
+[![QuantVision](https://img.shields.io/badge/QuantVision-%E2%AD%90%E2%AD%90%E2%AD%90%E2%AD%90%E2%AD%90-green?style=for-the-badge)](https://github.com/TomasPosada0626/QuantVision)
+[![CI](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml/badge.svg)](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/TomasPosada0626/QuantVision/graph/badge.svg)](https://codecov.io/gh/TomasPosada0626/QuantVision)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python)](https://www.python.org/)
+[![Type Checked](https://img.shields.io/badge/Type%20Checking-mypy%20strict-blue)](https://mypy-lang.org/)
+[![Code Style](https://img.shields.io/badge/Code%20Style-Black-000000)](https://black.readthedocs.io/)
+[![Security](https://img.shields.io/badge/Security-Bandit-yellow)](https://bandit.readthedocs.io/)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
@@ -82,8 +87,9 @@ QuantVision is a production-grade financial intelligence platform that combines 
 
 ## Live Demo
 - **URL:** https://quantvision-tomas.streamlit.app/
-- **Demo User:** demo@quantvision.dev / Demo123!@
-- **Data:** AAPL, MSFT, GOOGL (last 5 years)
+- **Demo User:** demo@quantvision.dev
+- **Demo Pass:** Demo123!@
+- **Pre-populated:** AAPL, MSFT, GOOGL
 
 ## Table of Contents
 1. [Installation](#installation)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import secrets
 from datetime import datetime
 
 import streamlit as st
@@ -9,6 +8,7 @@ from analytics.event_tracker import EventTracker
 from analytics.experimentation import ExperimentationService
 from config import SESSION_TTL_MINUTES, USERS_DB_PATH
 from integrations.webhooks import WebhookNotifier
+from security.csrf import generate_csrf_token, verify_csrf_token
 from security.input_validation import require_ticker_whitelist
 from services.alerts_service import AlertsService
 from services.auth_service import AuthService
@@ -58,13 +58,13 @@ logger.info("quantvision_initialized")
 def _csrf_token() -> str:
     token = st.session_state.get("csrf_token", "")
     if not token:
-        token = secrets.token_urlsafe(24)
+        token = generate_csrf_token()
         st.session_state["csrf_token"] = token
     return str(token)
 
 
 def _is_valid_csrf(token: str) -> bool:
-    return bool(token) and token == st.session_state.get("csrf_token", "")
+    return verify_csrf_token(token, st.session_state)
 
 
 def _apply_theme() -> None:
