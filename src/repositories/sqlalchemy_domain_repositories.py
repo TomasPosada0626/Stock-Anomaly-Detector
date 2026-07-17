@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pandas as pd
 
 from config import DATABASE_URL
+from repositories.sqlalchemy_migrations import ensure_domain_schema
 
 try:
     from sqlalchemy import (
@@ -32,6 +33,7 @@ class _BaseSqlRepository:
             raise RuntimeError("SQLAlchemy dependency not available")
         self.engine = create_engine(database_url, future=True)
         self.meta = MetaData()
+        ensure_domain_schema(self.engine)
 
     def _now(self) -> datetime:
         return datetime.now(UTC)
@@ -52,7 +54,6 @@ class SqlPortfolioRepository(_BaseSqlRepository):
             Column("buy_date", String(40), nullable=False),
             Column("created_at", DateTime(timezone=True), nullable=False),
         )
-        self.meta.create_all(self.engine)
 
     def add_position(
         self, username: str, ticker: str, quantity: float, buy_price: float, buy_date: str
@@ -118,7 +119,6 @@ class SqlWatchlistRepository(_BaseSqlRepository):
             Column("ticker", String(20), nullable=False),
             Column("created_at", DateTime(timezone=True), nullable=False),
         )
-        self.meta.create_all(self.engine)
 
     def create_watchlist(self, username: str, name: str) -> int:
         assert select is not None and insert is not None
@@ -237,7 +237,6 @@ class SqlAlertsRepository(_BaseSqlRepository):
             Column("message", String(400), nullable=False),
             Column("triggered_at", DateTime(timezone=True), nullable=False),
         )
-        self.meta.create_all(self.engine)
 
     def create_rule(
         self, username: str, ticker: str, alert_type: str, threshold: float | None, active: bool

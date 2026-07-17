@@ -91,12 +91,56 @@ class AlertScheduler:
         self.logger.info("scheduled_alert_evaluation_all summary=%s", summary)
         return summary
 
-    def run_continuous(self, interval_minutes: int = 15) -> None:
+    def run_continuous(
+        self,
+        interval_minutes: int = 15,
+        max_cycles: int = 0,
+        max_consecutive_failures: int = 10,
+        cycle_hook: Callable[[int, dict[str, int]], None] | None = None,
+        error_hook: Callable[[int, str], None] | None = None,
+    ) -> None:
         wait_seconds = max(1, int(interval_minutes)) * 60
-        self.logger.info("scheduler_continuous_started interval_seconds=%s", wait_seconds)
+        self.logger.info(
+            "scheduler_continuous_started interval_seconds=%s max_cycles=%s max_consecutive_failures=%s",
+            wait_seconds,
+            max_cycles,
+            max_consecutive_failures,
+        )
+        cycles_run = 0
+        consecutive_failures = 0
         try:
             while True:
-                self.evaluate_all_users_once()
+                if max_cycles > 0 and cycles_run >= max_cycles:
+                    self.logger.info(
+                        "scheduler_continuous_max_cycles_reached cycles=%s", cycles_run
+                    )
+                    return
+
+                cycle_number = cycles_run + 1
+                try:
+                    summary = self.evaluate_all_users_once()
+                    consecutive_failures = 0
+                    if cycle_hook is not None:
+                        cycle_hook(cycle_number, summary)
+                except Exception as exc:  # pragma: no cover - resiliency path
+                    consecutive_failures += 1
+                    error_message = str(exc)
+                    self.logger.exception(
+                        "scheduler_continuous_cycle_failed cycle=%s consecutive_failures=%s error=%s",
+                        cycle_number,
+                        consecutive_failures,
+                        error_message,
+                    )
+                    if error_hook is not None:
+                        error_hook(cycle_number, error_message)
+                    if consecutive_failures >= max_consecutive_failures:
+                        self.logger.error(
+                            "scheduler_continuous_stopping_after_failures failures=%s",
+                            consecutive_failures,
+                        )
+                        return
+
+                cycles_run += 1
                 time.sleep(wait_seconds)
         except KeyboardInterrupt:
             self.logger.info("scheduler_continuous_stopped")

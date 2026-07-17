@@ -122,3 +122,47 @@ def test_scheduler_run_continuous_stops_on_keyboard_interrupt(monkeypatch, tmp_p
     monkeypatch.setattr(scheduler_module.time, "sleep", fake_sleep)
     scheduler.run_continuous(interval_minutes=1)
     assert call_count["n"] == 1
+
+
+def test_scheduler_run_continuous_respects_max_cycles(monkeypatch, tmp_path) -> None:
+    db_path = str(tmp_path / "quantvision.db")
+    alerts = AlertsService(db_path=db_path)
+    scheduler = AlertScheduler(alerts, fetch_market_data=lambda _: pd.DataFrame())
+
+    cycles = []
+    monkeypatch.setattr(scheduler, "evaluate_all_users_once", lambda: {"alice": 1})
+    monkeypatch.setattr(scheduler_module.time, "sleep", lambda seconds: None)
+
+    scheduler.run_continuous(
+        interval_minutes=1,
+        max_cycles=2,
+        cycle_hook=lambda cycle, summary: cycles.append((cycle, summary)),
+    )
+
+    assert len(cycles) == 2
+    assert cycles[0][0] == 1
+    assert cycles[1][0] == 2
+
+
+def test_scheduler_run_continuous_stops_after_max_failures(monkeypatch, tmp_path) -> None:
+    db_path = str(tmp_path / "quantvision.db")
+    alerts = AlertsService(db_path=db_path)
+    scheduler = AlertScheduler(alerts, fetch_market_data=lambda _: pd.DataFrame())
+
+    failures = []
+
+    def _raise_cycle_error():
+        raise RuntimeError("cycle failed")
+
+    monkeypatch.setattr(scheduler, "evaluate_all_users_once", _raise_cycle_error)
+    monkeypatch.setattr(scheduler_module.time, "sleep", lambda seconds: None)
+
+    scheduler.run_continuous(
+        interval_minutes=1,
+        max_consecutive_failures=2,
+        error_hook=lambda cycle, message: failures.append((cycle, message)),
+    )
+
+    assert len(failures) == 2
+    assert failures[0][0] == 1
+    assert "cycle failed" in failures[0][1]

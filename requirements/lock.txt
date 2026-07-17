@@ -19,3 +19,5 @@ uvicorn==0.35.0
 apscheduler==3.11.1
 pydantic==2.11.7
 SQLAlchemy==2.0.44
+psycopg==3.2.9
+psycopg-binary==3.2.9

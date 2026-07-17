@@ -96,6 +96,10 @@ Main env variables:
 - `LOCKOUT_MINUTES`
 - `SCHEDULER_INTERVAL_MINUTES`
 - `SCHEDULER_RUN_CONTINUOUS`
+- `SCHEDULER_WORKER_MODE`
+- `SCHEDULER_MAX_CYCLES`
+- `SCHEDULER_MAX_CONSECUTIVE_FAILURES`
+- `SCHEDULER_HEARTBEAT_FILE`
 - `USE_SQLALCHEMY_REPOSITORIES`
 - `DATABASE_URL`
 
@@ -107,10 +111,28 @@ Persistence mode:
 - `USE_SQLALCHEMY_REPOSITORIES=false`: SQLite-native repositories in service layer.
 - `USE_SQLALCHEMY_REPOSITORIES=true`: SQLAlchemy repositories via `DATABASE_URL`.
 
+PostgreSQL production bootstrap:
+- Install dependencies: `pip install -r requirements.txt`
+- Set environment:
+  - `USE_SQLALCHEMY_REPOSITORIES=true`
+  - `DATABASE_URL=postgresql+psycopg://<user>:<password>@<host>:5432/<db_name>`
+- Run schema bootstrap/versioning:
+  - `python scripts/bootstrap_postgres.py`
+- Migration state is tracked in table `schema_migrations`.
+- Domain schema versioning entrypoint: `src/repositories/sqlalchemy_migrations.py`.
+
 Scheduler fallback mode:
 - APScheduler available: interval jobs in process.
 - APScheduler unavailable and `SCHEDULER_RUN_CONTINUOUS=true`: continuous all-users loop.
 - APScheduler unavailable and `SCHEDULER_RUN_CONTINUOUS=false`: single all-users pass and exit.
+
+Scheduler worker mode (recommended for cloud worker dynos/containers):
+- `SCHEDULER_WORKER_MODE=true`
+- `SCHEDULER_INTERVAL_MINUTES=15`
+- `SCHEDULER_MAX_CYCLES=0` (0 = infinite)
+- `SCHEDULER_MAX_CONSECUTIVE_FAILURES=10`
+- `SCHEDULER_HEARTBEAT_FILE=storage/logs/scheduler_heartbeat.json`
+- Run worker process: `python scripts/run_scheduler.py`
 
 ## Security
 - Password hashing via bcrypt.
@@ -152,6 +174,8 @@ Current endpoints:
 - `GET /health`
 - `GET /health/detailed`
 - `GET /metrics`
+- `POST /auth/login`
+- `POST /auth/logout`
 - `GET /users/{username}/role`
 - `GET /users/{username}/portfolio/summary`
 - `GET /users/{username}/portfolio/positions`
