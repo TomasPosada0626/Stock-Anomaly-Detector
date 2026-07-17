@@ -15,6 +15,9 @@ def test_sqlalchemy_adapter_ping_returns_structured_health() -> None:
     assert hasattr(status, "ok")
     assert hasattr(status, "message")
     assert isinstance(status.enabled, bool)
+    engine = adapter.get_engine()
+    if engine is not None:
+        engine.dispose()
 
 
 def test_sqlalchemy_adapter_disabled_when_dependency_missing(monkeypatch) -> None:
