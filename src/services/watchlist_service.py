@@ -18,9 +18,12 @@ try:
     from repositories.sqlalchemy_domain_repositories import (
         SqlWatchlistRepository as _SqlWatchlistRepositoryImported,
     )
+
     _SqlWatchlistRepositoryFactory = _SqlWatchlistRepositoryImported
 except Exception:  # pragma: no cover - optional dependency
     _SqlWatchlistRepositoryFactory = None
+
+SqlWatchlistRepository = _SqlWatchlistRepositoryFactory
 
 
 @dataclass(frozen=True)
@@ -41,9 +44,9 @@ class WatchlistService:
         self._encryption_key = os.getenv("DATA_ENCRYPTION_KEY", "")
         self._repo: Any = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        if use_sqlalchemy and _SqlWatchlistRepositoryFactory is not None:
+        if use_sqlalchemy and SqlWatchlistRepository is not None:
             try:
-                self._repo = _SqlWatchlistRepositoryFactory()
+                self._repo = SqlWatchlistRepository()
             except Exception:
                 self._repo = None
         self.initialize()

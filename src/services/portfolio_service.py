@@ -16,9 +16,12 @@ try:
     from repositories.sqlalchemy_domain_repositories import (
         SqlPortfolioRepository as _SqlPortfolioRepositoryImported,
     )
+
     _SqlPortfolioRepositoryFactory = _SqlPortfolioRepositoryImported
 except Exception:  # pragma: no cover - optional dependency
     _SqlPortfolioRepositoryFactory = None
+
+SqlPortfolioRepository = _SqlPortfolioRepositoryFactory
 
 
 @dataclass(frozen=True)
@@ -42,9 +45,9 @@ class PortfolioService:
         self._repo: Any = None
         db_dir = Path(db_path).parent
         db_dir.mkdir(parents=True, exist_ok=True)
-        if use_sqlalchemy and _SqlPortfolioRepositoryFactory is not None:
+        if use_sqlalchemy and SqlPortfolioRepository is not None:
             try:
-                self._repo = _SqlPortfolioRepositoryFactory()
+                self._repo = SqlPortfolioRepository()
             except Exception:
                 self._repo = None
         self.initialize()
@@ -74,13 +77,15 @@ class PortfolioService:
     def add_position(self, data: PositionInput) -> int:
         """Persist one portfolio position and return its id."""
         if self._repo is not None:
-            return int(self._repo.add_position(
-                username=data.username,
-                ticker=data.ticker,
-                quantity=float(data.quantity),
-                buy_price=float(data.buy_price),
-                buy_date=data.buy_date,
-            ))
+            return int(
+                self._repo.add_position(
+                    username=data.username,
+                    ticker=data.ticker,
+                    quantity=float(data.quantity),
+                    buy_price=float(data.buy_price),
+                    buy_date=data.buy_date,
+                )
+            )
         conn = self._conn()
         cur = conn.cursor()
         cur.execute(

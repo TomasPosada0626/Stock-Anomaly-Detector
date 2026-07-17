@@ -59,8 +59,7 @@ def _covers_date_range(df: pd.DataFrame, start_date: DateLike, end_date: DateLik
         return False
     df_dates = pd.to_datetime(df.index)
     return bool(
-        df_dates.min() <= pd.to_datetime(start_date)
-        and df_dates.max() >= pd.to_datetime(end_date)
+        df_dates.min() <= pd.to_datetime(start_date) and df_dates.max() >= pd.to_datetime(end_date)
     )
 
 

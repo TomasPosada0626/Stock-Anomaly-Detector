@@ -12,6 +12,7 @@ try:
     from sqlalchemy import create_engine
     from sqlalchemy import text as _sqlalchemy_text_imported
     from sqlalchemy.engine import Engine
+
     _sqlalchemy_text = _sqlalchemy_text_imported
 except Exception:  # pragma: no cover - optional dependency
     Engine = Any

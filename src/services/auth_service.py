@@ -4,7 +4,7 @@ import re
 import secrets
 import sqlite3
 from datetime import UTC, datetime, timedelta
-from typing import Optional, Tuple
+from typing import Match, Optional, Tuple
 
 import bcrypt
 
@@ -264,9 +264,9 @@ class AuthService:
         return cls._legacy_hash_password(password) == stored_hash
 
     @staticmethod
-    def is_strong_password(password: str) -> bool:
+    def is_strong_password(password: str) -> Match[str] | None:
         pattern = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$"
-        return bool(re.match(pattern, password))
+        return re.match(pattern, password)
 
     @staticmethod
     def _contains_html_payload(value: str) -> bool:
@@ -353,7 +353,9 @@ class AuthService:
             self.logger.info("register_success username=%s", username_clean)
             return True, None
         except sqlite3.IntegrityError as exc:
-            conn.rollback()
+            rollback = getattr(conn, "rollback", None)
+            if callable(rollback):
+                rollback()
             # Re-check both keys to return an accurate conflict message.
             username_taken = False
             email_taken = False

@@ -18,9 +18,12 @@ try:
     from repositories.sqlalchemy_domain_repositories import (
         SqlAlertsRepository as _SqlAlertsRepositoryImported,
     )
+
     _SqlAlertsRepositoryFactory = _SqlAlertsRepositoryImported
 except Exception:  # pragma: no cover - optional dependency
     _SqlAlertsRepositoryFactory = None
+
+SqlAlertsRepository = _SqlAlertsRepositoryFactory
 
 
 @dataclass(frozen=True)
@@ -44,9 +47,9 @@ class AlertsService:
         self._encryption_key = os.getenv("DATA_ENCRYPTION_KEY", "")
         self._repo: Any = None
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        if use_sqlalchemy and _SqlAlertsRepositoryFactory is not None:
+        if use_sqlalchemy and SqlAlertsRepository is not None:
             try:
-                self._repo = _SqlAlertsRepositoryFactory()
+                self._repo = SqlAlertsRepository()
             except Exception:
                 self._repo = None
         self.initialize()
@@ -86,13 +89,15 @@ class AlertsService:
     def create_rule(self, rule: AlertRule) -> int:
         """Create an alert rule and return its identifier."""
         if self._repo is not None:
-            return int(self._repo.create_rule(
-                username=rule.username,
-                ticker=rule.ticker,
-                alert_type=rule.alert_type,
-                threshold=rule.threshold,
-                active=rule.active,
-            ))
+            return int(
+                self._repo.create_rule(
+                    username=rule.username,
+                    ticker=rule.ticker,
+                    alert_type=rule.alert_type,
+                    threshold=rule.threshold,
+                    active=rule.active,
+                )
+            )
         stored_ticker = rule.ticker.upper()
         if self._encryption_key:
             stored_ticker = encrypt_value(stored_ticker, self._encryption_key)
@@ -151,12 +156,14 @@ class AlertsService:
     def emit_alert(self, username: str, ticker: str, alert_type: str, message: str) -> int:
         """Persist one emitted alert event and return its id."""
         if self._repo is not None:
-            return int(self._repo.emit_alert(
-                username=username,
-                ticker=ticker,
-                alert_type=alert_type,
-                message=message,
-            ))
+            return int(
+                self._repo.emit_alert(
+                    username=username,
+                    ticker=ticker,
+                    alert_type=alert_type,
+                    message=message,
+                )
+            )
         stored_ticker = ticker.upper()
         stored_message = message
         if self._encryption_key:
