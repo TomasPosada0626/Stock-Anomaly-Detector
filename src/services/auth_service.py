@@ -150,7 +150,72 @@ class AuthService:
             self.migrate_users_role_column()
             self.migrate_sessions_table()
         self.create_tables()
+        self.bootstrap_user_from_env()
         self.cleanup_expired_sessions()
+
+    def bootstrap_user_from_env(self) -> None:
+        email = os.getenv("BOOTSTRAP_ADMIN_EMAIL", "").strip().lower()
+        password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "").strip()
+        username = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip()
+        first_name = os.getenv("BOOTSTRAP_ADMIN_FIRST_NAME", "Tomas").strip() or "Tomas"
+        last_name = os.getenv("BOOTSTRAP_ADMIN_LAST_NAME", "Posada").strip() or "Posada"
+        role = os.getenv("BOOTSTRAP_ADMIN_ROLE", "ADMIN").strip().upper() or "ADMIN"
+
+        if not email or not password:
+            return
+
+        if not username:
+            username = email.split("@", 1)[0]
+
+        if not self.is_strong_password(password):
+            self.logger.warning("bootstrap_user_skipped reason=weak_password email=%s", email)
+            return
+
+        role_clean = role if role in ALLOWED_ROLES else "ADMIN"
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT username FROM users WHERE username=? OR lower(email)=lower(?)",
+                (username, email),
+            )
+            row = cursor.fetchone()
+            hashed_password = self.hash_password(password)
+            if row and row[0]:
+                target_username = str(row[0])
+                cursor.execute(
+                    """
+                    UPDATE users
+                    SET email=?, first_name=?, last_name=?, role=?, password=?
+                    WHERE username=?
+                    """,
+                    (email, first_name, last_name, role_clean, hashed_password, target_username),
+                )
+                self.logger.info(
+                    "bootstrap_user_updated username=%s email=%s", target_username, email
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO users (username, email, first_name, last_name, role, password, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        username,
+                        email,
+                        first_name,
+                        last_name,
+                        role_clean,
+                        hashed_password,
+                        self._utcnow().isoformat(),
+                    ),
+                )
+                self.logger.info("bootstrap_user_created username=%s email=%s", username, email)
+            conn.commit()
+        except sqlite3.Error as exc:
+            self.logger.exception("bootstrap_user_failed email=%s error=%s", email, str(exc))
+        finally:
+            conn.close()
 
     @staticmethod
     def _utcnow() -> datetime:
@@ -246,8 +311,8 @@ class AuthService:
             row = cursor.fetchone()
         finally:
             conn.close()
-        failed_count = row[0] if row else 0
-        return max(0, MAX_FAILED_LOGIN_ATTEMPTS - failed_count)
+        failed_count = int(row[0]) if row and row[0] is not None else 0
+        return int(max(0, int(MAX_FAILED_LOGIN_ATTEMPTS) - failed_count))
 
     @staticmethod
     def hash_password(password: str) -> str:

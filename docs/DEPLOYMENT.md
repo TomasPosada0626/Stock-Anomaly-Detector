@@ -136,3 +136,14 @@ Not yet implemented:
 - `SCHEDULER_RUN_CONTINUOUS=true`
 - `USE_SQLALCHEMY_REPOSITORIES=false`
 - `DATABASE_URL=sqlite:///storage/quantvision.db`
+
+For Streamlit Community Cloud access bootstrap, set these secrets/environment variables:
+
+- `BOOTSTRAP_ADMIN_EMAIL=your-email@example.com`
+- `BOOTSTRAP_ADMIN_PASSWORD=YourStrongPassword123!`
+- `BOOTSTRAP_ADMIN_USERNAME=yourpreferredusername`
+- `BOOTSTRAP_ADMIN_FIRST_NAME=Tomas`
+- `BOOTSTRAP_ADMIN_LAST_NAME=Posada`
+- `BOOTSTRAP_ADMIN_ROLE=ADMIN`
+
+This creates or updates a login user on startup. It is useful because local SQLite storage in cloud-style environments may reset across redeploys.
