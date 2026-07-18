@@ -319,3 +319,326 @@ class SqlAlertsRepository(_BaseSqlRepository):
         with self.engine.begin() as conn:
             rows = conn.execute(select(self.rules.c.username).distinct()).all()
         return sorted(str(row[0]) for row in rows if row and row[0])
+
+
+class SqlAuthRepository(_BaseSqlRepository):
+    def __init__(self, database_url: str = DATABASE_URL) -> None:
+        super().__init__(database_url)
+        assert Table is not None
+        self.users = Table(
+            "users",
+            self.meta,
+            Column("username", String(120), primary_key=True),
+            Column("email", String(255), nullable=False, unique=True),
+            Column("first_name", String(120), nullable=False),
+            Column("last_name", String(120), nullable=False),
+            Column("role", String(20), nullable=False, default="ANALYST"),
+            Column("password", String(255), nullable=False),
+            Column("created_at", DateTime(timezone=True), nullable=False),
+        )
+        self.sessions = Table(
+            "sessions",
+            self.meta,
+            Column("session_id", String(80), primary_key=True),
+            Column("username", String(120), nullable=True, index=True),
+            Column("login_time", DateTime(timezone=True), nullable=True),
+            Column("expires_at", DateTime(timezone=True), nullable=True),
+        )
+        self.failed_logins = Table(
+            "failed_logins",
+            self.meta,
+            Column("identifier", String(255), primary_key=True),
+            Column("failed_count", Integer, nullable=False),
+            Column("last_failed_at", DateTime(timezone=True), nullable=False),
+            Column("locked_until", DateTime(timezone=True), nullable=True),
+        )
+        self.auth_audit = Table(
+            "auth_audit",
+            self.meta,
+            Column("id", Integer, primary_key=True, autoincrement=True),
+            Column("event_type", String(60), nullable=False),
+            Column("identifier", String(255), nullable=True),
+            Column("success", Boolean, nullable=False),
+            Column("message", String(400), nullable=True),
+            Column("created_at", DateTime(timezone=True), nullable=False),
+        )
+
+    def username_exists(self, username: str) -> bool:
+        assert select is not None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.users.c.username).where(self.users.c.username == username.strip())
+            ).first()
+        return row is not None
+
+    def email_exists(self, email: str) -> bool:
+        assert select is not None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.users.c.email).where(self.users.c.email == email.strip().lower())
+            ).first()
+        return row is not None
+
+    def upsert_user(
+        self,
+        username: str,
+        email: str,
+        first_name: str,
+        last_name: str,
+        role: str,
+        password: str,
+        created_at: datetime,
+    ) -> None:
+        assert select is not None and insert is not None
+        with self.engine.begin() as conn:
+            existing = conn.execute(
+                select(self.users.c.username).where(
+                    (self.users.c.username == username) | (self.users.c.email == email.lower())
+                )
+            ).first()
+            if existing and existing[0]:
+                conn.execute(
+                    self.users.update()
+                    .where(self.users.c.username == str(existing[0]))
+                    .values(
+                        email=email.lower(),
+                        first_name=first_name,
+                        last_name=last_name,
+                        role=role,
+                        password=password,
+                    )
+                )
+            else:
+                conn.execute(
+                    insert(self.users).values(
+                        username=username,
+                        email=email.lower(),
+                        first_name=first_name,
+                        last_name=last_name,
+                        role=role,
+                        password=password,
+                        created_at=created_at,
+                    )
+                )
+
+    def create_user(
+        self,
+        username: str,
+        email: str,
+        first_name: str,
+        last_name: str,
+        role: str,
+        password: str,
+        created_at: datetime,
+    ) -> None:
+        assert insert is not None
+        with self.engine.begin() as conn:
+            conn.execute(
+                insert(self.users).values(
+                    username=username,
+                    email=email.lower(),
+                    first_name=first_name,
+                    last_name=last_name,
+                    role=role,
+                    password=password,
+                    created_at=created_at,
+                )
+            )
+
+    def create_audit(
+        self, event_type: str, identifier: str, success: bool, message: str, created_at: datetime
+    ) -> None:
+        assert insert is not None
+        with self.engine.begin() as conn:
+            conn.execute(
+                insert(self.auth_audit).values(
+                    event_type=event_type,
+                    identifier=identifier,
+                    success=bool(success),
+                    message=message,
+                    created_at=created_at,
+                )
+            )
+
+    def get_locked_until(self, identifier: str) -> str | None:
+        assert select is not None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.failed_logins.c.locked_until).where(
+                    self.failed_logins.c.identifier == identifier.strip().lower()
+                )
+            ).first()
+        if not row or row[0] is None:
+            return None
+        value = row[0]
+        return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+    def get_failed_count(self, identifier: str) -> int:
+        assert select is not None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.failed_logins.c.failed_count).where(
+                    self.failed_logins.c.identifier == identifier.strip().lower()
+                )
+            ).first()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def upsert_failed_login(
+        self,
+        identifier: str,
+        failed_count: int,
+        last_failed_at: datetime,
+        locked_until: datetime | None,
+    ) -> None:
+        assert select is not None and insert is not None
+        normalized = identifier.strip().lower()
+        with self.engine.begin() as conn:
+            existing = conn.execute(
+                select(self.failed_logins.c.identifier).where(
+                    self.failed_logins.c.identifier == normalized
+                )
+            ).first()
+            values = {
+                "failed_count": int(failed_count),
+                "last_failed_at": last_failed_at,
+                "locked_until": locked_until,
+            }
+            if existing:
+                conn.execute(
+                    self.failed_logins.update()
+                    .where(self.failed_logins.c.identifier == normalized)
+                    .values(**values)
+                )
+            else:
+                conn.execute(insert(self.failed_logins).values(identifier=normalized, **values))
+
+    def clear_failed_attempts(self, identifier: str) -> None:
+        assert delete is not None
+        with self.engine.begin() as conn:
+            conn.execute(
+                delete(self.failed_logins).where(
+                    self.failed_logins.c.identifier == identifier.strip().lower()
+                )
+            )
+
+    def get_password_by_identifier(self, identifier: str) -> str | None:
+        assert select is not None
+        clean = identifier.strip()
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.users.c.password).where(
+                    (self.users.c.username == clean) | (self.users.c.email == clean.lower())
+                )
+            ).first()
+        return str(row[0]) if row and row[0] is not None else None
+
+    def upgrade_password_for_identifier(self, identifier: str, password: str) -> None:
+        clean = identifier.strip()
+        with self.engine.begin() as conn:
+            conn.execute(
+                self.users.update()
+                .where((self.users.c.username == clean) | (self.users.c.email == clean.lower()))
+                .values(password=password)
+            )
+
+    def get_username_by_identifier(self, identifier: str) -> str | None:
+        assert select is not None
+        clean = identifier.strip()
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.users.c.username).where(
+                    (self.users.c.username == clean) | (self.users.c.email == clean.lower())
+                )
+            ).first()
+        return str(row[0]) if row and row[0] is not None else None
+
+    def get_user_role(self, username: str) -> str | None:
+        assert select is not None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.users.c.role).where(self.users.c.username == username.strip())
+            ).first()
+        return str(row[0]) if row and row[0] is not None else None
+
+    def set_user_role(self, username: str, role: str) -> bool:
+        with self.engine.begin() as conn:
+            result = conn.execute(
+                self.users.update()
+                .where(self.users.c.username == username.strip())
+                .values(role=role)
+            )
+        return bool((result.rowcount or 0) > 0)
+
+    def list_users(self) -> list[tuple[str, str, str]]:
+        assert select is not None
+        with self.engine.begin() as conn:
+            rows = conn.execute(
+                select(self.users.c.username, self.users.c.email, self.users.c.role).order_by(
+                    self.users.c.username.asc()
+                )
+            ).all()
+        return [(str(row[0]), str(row[1]), str(row[2]).upper()) for row in rows]
+
+    def create_session(
+        self,
+        session_id: str,
+        username: str,
+        login_time: datetime,
+        expires_at: datetime,
+        invalidate_existing: bool,
+    ) -> None:
+        assert insert is not None and delete is not None
+        with self.engine.begin() as conn:
+            if invalidate_existing:
+                conn.execute(delete(self.sessions).where(self.sessions.c.username == username))
+            conn.execute(
+                insert(self.sessions).values(
+                    session_id=session_id,
+                    username=username,
+                    login_time=login_time,
+                    expires_at=expires_at,
+                )
+            )
+
+    def get_session_expires_at(self, session_id: str) -> str | None:
+        assert select is not None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.sessions.c.expires_at).where(self.sessions.c.session_id == session_id)
+            ).first()
+        if not row or row[0] is None:
+            return None
+        value = row[0]
+        return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+    def get_session_username_and_expiry(self, session_id: str) -> tuple[str | None, str | None]:
+        assert select is not None
+        with self.engine.begin() as conn:
+            row = conn.execute(
+                select(self.sessions.c.username, self.sessions.c.expires_at).where(
+                    self.sessions.c.session_id == session_id
+                )
+            ).first()
+        if not row:
+            return None, None
+        expiry = (
+            row[1].isoformat()
+            if row[1] is not None and hasattr(row[1], "isoformat")
+            else (str(row[1]) if row[1] is not None else None)
+        )
+        return (str(row[0]) if row[0] is not None else None, expiry)
+
+    def invalidate_session(self, session_id: str) -> None:
+        assert delete is not None
+        with self.engine.begin() as conn:
+            conn.execute(delete(self.sessions).where(self.sessions.c.session_id == session_id))
+
+    def cleanup_expired_sessions(self, now: datetime) -> int:
+        assert delete is not None
+        with self.engine.begin() as conn:
+            result = conn.execute(
+                delete(self.sessions).where(
+                    self.sessions.c.expires_at.is_not(None), self.sessions.c.expires_at <= now
+                )
+            )
+        return int(result.rowcount or 0)

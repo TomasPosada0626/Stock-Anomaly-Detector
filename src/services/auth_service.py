@@ -4,17 +4,28 @@ import re
 import secrets
 import sqlite3
 from datetime import UTC, datetime, timedelta
-from typing import Match, Optional, Tuple
+from typing import Any, Match, Optional, Tuple, cast
 
 import bcrypt
 
 from config import (
+    DATABASE_URL,
     LOCKOUT_MINUTES,
     MAX_FAILED_LOGIN_ATTEMPTS,
     SESSION_TTL_MINUTES,
+    USE_SQLALCHEMY_REPOSITORIES,
     USERS_DB_PATH,
 )
 from services.observability import get_logger, metric
+
+SqlAuthRepository: Any
+
+try:
+    from repositories.sqlalchemy_domain_repositories import SqlAuthRepository as _SqlAuthRepository
+
+    SqlAuthRepository = _SqlAuthRepository
+except Exception:  # pragma: no cover - optional dependency
+    SqlAuthRepository = None
 
 ALLOWED_ROLES = {"ADMIN", "ANALYST", "GUEST"}
 MODULE_ACCESS_POLICY = {
@@ -52,12 +63,23 @@ MODULE_ACCESS_POLICY = {
 
 
 class AuthService:
-    def __init__(self, db_path: str = USERS_DB_PATH) -> None:
+    def __init__(
+        self,
+        db_path: str = USERS_DB_PATH,
+        use_sqlalchemy: bool = USE_SQLALCHEMY_REPOSITORIES,
+        database_url: str = DATABASE_URL,
+    ) -> None:
         self.db_path = db_path
         db_dir = os.path.dirname(self.db_path)
         if db_dir:
             os.makedirs(db_dir, exist_ok=True)
         self.logger = get_logger("auth_service")
+        self._repo: Any = None
+        if use_sqlalchemy and SqlAuthRepository is not None:
+            try:
+                self._repo = SqlAuthRepository(database_url=database_url)
+            except Exception:
+                self._repo = None
 
     def get_connection(self) -> sqlite3.Connection:
         return sqlite3.connect(self.db_path, check_same_thread=False, timeout=5)
@@ -145,6 +167,10 @@ class AuthService:
         conn.close()
 
     def initialize(self) -> None:
+        if self._repo is not None:
+            self.bootstrap_user_from_env()
+            self.cleanup_expired_sessions()
+            return
         if os.path.exists(self.db_path):
             self.migrate_users_table()
             self.migrate_users_role_column()
@@ -172,6 +198,22 @@ class AuthService:
             return
 
         role_clean = role if role in ALLOWED_ROLES else "ADMIN"
+        if self._repo is not None:
+            try:
+                self._repo.upsert_user(
+                    username=username,
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    role=role_clean,
+                    password=self.hash_password(password),
+                    created_at=self._utcnow(),
+                )
+                self.logger.info("bootstrap_user_upserted username=%s email=%s", username, email)
+            except Exception as exc:
+                self.logger.exception("bootstrap_user_failed email=%s error=%s", email, str(exc))
+            return
+
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -224,6 +266,18 @@ class AuthService:
     def _record_audit(
         self, event_type: str, identifier: str, success: bool, message: Optional[str] = None
     ) -> None:
+        if self._repo is not None:
+            try:
+                self._repo.create_audit(
+                    event_type=event_type,
+                    identifier=identifier,
+                    success=success,
+                    message=message or "",
+                    created_at=self._utcnow(),
+                )
+            except Exception:
+                return
+            return
         conn = None
         try:
             conn = self.get_connection()
@@ -241,6 +295,18 @@ class AuthService:
                 conn.close()
 
     def _get_lockout_remaining_minutes(self, identifier: str) -> int:
+        if self._repo is not None:
+            locked_until_raw = self._repo.get_locked_until(identifier)
+            if not locked_until_raw:
+                return 0
+            try:
+                locked_until = datetime.fromisoformat(locked_until_raw)
+            except ValueError:
+                return 0
+            delta = locked_until - self._utcnow()
+            return max(
+                0, int(delta.total_seconds() // 60) + (1 if delta.total_seconds() > 0 else 0)
+            )
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -267,6 +333,17 @@ class AuthService:
         normalized = identifier.strip().lower()
         now = self._utcnow()
         failed_count = 0
+        if self._repo is not None:
+            failed_count = self._repo.get_failed_count(normalized) + 1
+            locked_until_dt: datetime | None = None
+            if failed_count >= MAX_FAILED_LOGIN_ATTEMPTS:
+                locked_until_dt = now + timedelta(minutes=LOCKOUT_MINUTES)
+            self._repo.upsert_failed_login(normalized, failed_count, now, locked_until_dt)
+            self.logger.warning("failed_login identifier=%s count=%s", normalized, failed_count)
+            metric(
+                self.logger, "auth_failed_login", identifier=normalized, failed_count=failed_count
+            )
+            return
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -276,12 +353,12 @@ class AuthService:
             )
             row = cursor.fetchone()
             failed_count = (row[0] if row else 0) + 1
-            locked_until = None
+            locked_until_iso: str | None = None
             if failed_count >= MAX_FAILED_LOGIN_ATTEMPTS:
-                locked_until = (now + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
+                locked_until_iso = (now + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
             cursor.execute(
                 "INSERT OR REPLACE INTO failed_logins (identifier, failed_count, last_failed_at, locked_until) VALUES (?, ?, ?, ?)",
-                (normalized, failed_count, now.isoformat(), locked_until),
+                (normalized, failed_count, now.isoformat(), locked_until_iso),
             )
             conn.commit()
         finally:
@@ -290,6 +367,9 @@ class AuthService:
         metric(self.logger, "auth_failed_login", identifier=normalized, failed_count=failed_count)
 
     def _clear_failed_attempts(self, identifier: str) -> None:
+        if self._repo is not None:
+            self._repo.clear_failed_attempts(identifier)
+            return
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -302,6 +382,9 @@ class AuthService:
 
     def _remaining_attempts(self, identifier: str) -> int:
         normalized = identifier.strip().lower()
+        if self._repo is not None:
+            failed_count = self._repo.get_failed_count(normalized)
+            return int(max(0, int(MAX_FAILED_LOGIN_ATTEMPTS) - int(failed_count)))
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -340,6 +423,8 @@ class AuthService:
         return "<" in lowered or ">" in lowered or "script" in lowered
 
     def is_username_available(self, username: str) -> bool:
+        if self._repo is not None:
+            return not self._repo.username_exists(username)
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -350,6 +435,8 @@ class AuthService:
         return result is None
 
     def is_email_available(self, email: str) -> bool:
+        if self._repo is not None:
+            return not self._repo.email_exists(email)
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -383,6 +470,45 @@ class AuthService:
             )
             self.logger.warning("register_rejected_html_payload identifier=%s", username_clean)
             return False, "Registration contains invalid characters."
+
+        if self._repo is not None:
+            try:
+                if self._repo.username_exists(username_clean):
+                    self._record_audit("register", username_clean, False, "username unavailable")
+                    self.logger.info("register_failed_username username=%s", username_clean)
+                    return False, "Username is not available."
+                if self._repo.email_exists(email_clean):
+                    self._record_audit("register", email_clean, False, "email already exists")
+                    self.logger.info("register_failed_email email=%s", email_clean)
+                    return False, "Email is already registered. Try logging in."
+                self._repo.create_user(
+                    username=username_clean,
+                    email=email_clean,
+                    first_name=first_name_clean,
+                    last_name=last_name_clean,
+                    role=role_clean,
+                    password=self.hash_password(password_clean),
+                    created_at=self._utcnow(),
+                )
+                self._record_audit("register", username_clean, True, "user registered")
+                self.logger.info("register_success username=%s", username_clean)
+                return True, None
+            except Exception as exc:
+                username_taken = self._repo.username_exists(username_clean)
+                email_taken = self._repo.email_exists(email_clean)
+                if username_taken:
+                    self._record_audit("register", username_clean, False, "username unavailable")
+                    self.logger.info("register_failed_username username=%s", username_clean)
+                    return False, "Username is not available."
+                if email_taken:
+                    self._record_audit("register", email_clean, False, "email already exists")
+                    self.logger.info("register_failed_email email=%s", email_clean)
+                    return False, "Email is already registered. Try logging in."
+                self._record_audit("register", username_clean, False, "data conflict")
+                self.logger.exception(
+                    "register_failed_data_conflict identifier=%s error=%s", username_clean, str(exc)
+                )
+                return False, "Registration failed due to a data conflict. Please try again."
 
         conn = self.get_connection()
         conn_closed = False
@@ -462,36 +588,56 @@ class AuthService:
             return False, f"Too many failed attempts. Try again in {remaining} minute(s)."
 
         password_ok = False
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT password FROM users WHERE username=? OR lower(email)=lower(?)",
-                (identifier, identifier),
-            )
-            row = cursor.fetchone()
-            if not row:
+        if self._repo is not None:
+            stored_hash = self._repo.get_password_by_identifier(identifier)
+            if not stored_hash:
                 self._register_failed_attempt(identifier)
                 self._record_audit("login", identifier, False, "unknown identifier")
                 self.logger.warning("login_unknown_identifier identifier=%s", identifier)
                 return False, "Invalid username/email or password."
-
-            stored_hash = row[0]
             password_to_verify = password
             password_ok = self.verify_password(password_to_verify, stored_hash)
             if not password_ok:
                 stripped_password = password.strip()
                 if stripped_password != password:
-                    # Accept accidental surrounding whitespace from browser autofill/copy-paste.
                     password_ok = self.verify_password(stripped_password, stored_hash)
                     if password_ok:
                         password_to_verify = stripped_password
-
             if password_ok and not stored_hash.startswith("$2"):
-                cursor.execute(
-                    "UPDATE users SET password=? WHERE username=? OR lower(email)=lower(?)",
-                    (self.hash_password(password_to_verify), identifier, identifier),
+                self._repo.upgrade_password_for_identifier(
+                    identifier, self.hash_password(password_to_verify)
                 )
-                conn.commit()
+        else:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT password FROM users WHERE username=? OR lower(email)=lower(?)",
+                    (identifier, identifier),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    self._register_failed_attempt(identifier)
+                    self._record_audit("login", identifier, False, "unknown identifier")
+                    self.logger.warning("login_unknown_identifier identifier=%s", identifier)
+                    return False, "Invalid username/email or password."
+
+                stored_hash = row[0]
+                password_to_verify = password
+                password_ok = self.verify_password(password_to_verify, stored_hash)
+                if not password_ok:
+                    stripped_password = password.strip()
+                    if stripped_password != password:
+                        # Accept accidental surrounding whitespace from browser autofill/copy-paste.
+                        password_ok = self.verify_password(stripped_password, stored_hash)
+                        if password_ok:
+                            password_to_verify = stripped_password
+
+                if password_ok and not stored_hash.startswith("$2"):
+                    cursor.execute(
+                        "UPDATE users SET password=? WHERE username=? OR lower(email)=lower(?)",
+                        (self.hash_password(password_to_verify), identifier, identifier),
+                    )
+                    conn.commit()
 
         if not password_ok:
             self._register_failed_attempt(identifier)
@@ -519,6 +665,8 @@ class AuthService:
 
     def get_username_by_identifier(self, user_or_email: str) -> Optional[str]:
         identifier = user_or_email.strip()
+        if self._repo is not None:
+            return cast(Optional[str], self._repo.get_username_by_identifier(identifier))
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -532,6 +680,9 @@ class AuthService:
         return row[0] if row else None
 
     def get_user_role(self, username: str) -> str:
+        if self._repo is not None:
+            role = (self._repo.get_user_role(username) or "ANALYST").upper()
+            return role if role in ALLOWED_ROLES else "ANALYST"
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -546,18 +697,25 @@ class AuthService:
         role_clean = role.strip().upper()
         if role_clean not in ALLOWED_ROLES:
             return False
+        if self._repo is not None:
+            updated = bool(self._repo.set_user_role(username.strip(), role_clean))
+            if updated:
+                self._record_audit("role_update", username, True, f"role={role_clean}")
+            return updated
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE users SET role=? WHERE username=?", (role_clean, username.strip())
             )
-            updated = cursor.rowcount if cursor.rowcount is not None else 0
+            updated_count = cursor.rowcount if cursor.rowcount is not None else 0
             conn.commit()
-        if updated:
+        if updated_count:
             self._record_audit("role_update", username, True, f"role={role_clean}")
-        return updated > 0
+        return updated_count > 0
 
     def list_users(self) -> list[tuple[str, str, str]]:
+        if self._repo is not None:
+            return cast(list[tuple[str, str, str]], self._repo.list_users())
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT username, email, role FROM users ORDER BY username ASC")
@@ -583,6 +741,17 @@ class AuthService:
         session_id = secrets.token_hex(32)
         now = self._utcnow()
         expires_at = (now + timedelta(minutes=ttl_minutes)).isoformat()
+        if self._repo is not None:
+            self._repo.create_session(
+                session_id=session_id,
+                username=username,
+                login_time=now,
+                expires_at=datetime.fromisoformat(expires_at),
+                invalidate_existing=invalidate_existing,
+            )
+            self._record_audit("session_create", username, True, "session created")
+            self.logger.info("session_create username=%s", username)
+            return session_id
         with self.get_connection() as conn:
             cursor = conn.cursor()
             if invalidate_existing:
@@ -597,6 +766,15 @@ class AuthService:
         return session_id
 
     def is_session_valid(self, session_id: str) -> bool:
+        if self._repo is not None:
+            expires_at_raw = self._repo.get_session_expires_at(session_id)
+            if not expires_at_raw:
+                return False
+            try:
+                expires_at = datetime.fromisoformat(expires_at_raw)
+            except ValueError:
+                return False
+            return expires_at > self._utcnow()
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT expires_at FROM sessions WHERE session_id=?", (session_id,))
@@ -610,6 +788,20 @@ class AuthService:
         return expires_at > self._utcnow()
 
     def get_session_username(self, session_id: str) -> Optional[str]:
+        if self._repo is not None:
+            username, expires_at_raw = cast(
+                tuple[Optional[str], Optional[str]],
+                self._repo.get_session_username_and_expiry(session_id),
+            )
+            if not username or not expires_at_raw:
+                return None
+            try:
+                expires_at = datetime.fromisoformat(expires_at_raw)
+            except ValueError:
+                return None
+            if expires_at <= self._utcnow():
+                return None
+            return username
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -638,6 +830,10 @@ class AuthService:
         return session_username == username.strip()
 
     def invalidate_session(self, session_id: str) -> None:
+        if self._repo is not None:
+            self._repo.invalidate_session(session_id)
+            self._record_audit("session_invalidate", session_id, True, "session invalidated")
+            return
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM sessions WHERE session_id=?", (session_id,))
@@ -646,6 +842,11 @@ class AuthService:
 
     def cleanup_expired_sessions(self) -> int:
         now = self._utcnow().isoformat()
+        if self._repo is not None:
+            deleted = int(self._repo.cleanup_expired_sessions(self._utcnow()))
+            if deleted:
+                self.logger.info("session_cleanup deleted=%s", deleted)
+            return deleted
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(

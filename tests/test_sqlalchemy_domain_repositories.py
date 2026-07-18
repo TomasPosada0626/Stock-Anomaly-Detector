@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -95,5 +96,44 @@ def test_sql_alerts_repository_crud_and_owner_listing(tmp_path) -> None:
 
         repo.delete_rule(rule_id=bob_rule, username="bob")
         assert repo.list_rules("bob").empty
+    finally:
+        repo.engine.dispose()
+
+
+@pytest.mark.skipif(repo_module.create_engine is None, reason="SQLAlchemy not installed")
+def test_sql_auth_repository_crud_and_session_flow(tmp_path) -> None:
+    db_url = f"sqlite:///{tmp_path / 'auth.db'}"
+    repo = repo_module.SqlAuthRepository(database_url=db_url)
+    try:
+        created_at = datetime.now(UTC)
+        repo.create_user(
+            username="tomas",
+            email="tomas@example.com",
+            first_name="Tomas",
+            last_name="Posada",
+            role="ADMIN",
+            password="hashed",
+            created_at=created_at,
+        )
+        assert repo.username_exists("tomas") is True
+        assert repo.email_exists("tomas@example.com") is True
+        assert repo.get_username_by_identifier("tomas@example.com") == "tomas"
+        assert repo.get_user_role("tomas") == "ADMIN"
+
+        repo.create_session(
+            session_id="abc123",
+            username="tomas",
+            login_time=created_at,
+            expires_at=created_at + timedelta(minutes=60),
+            invalidate_existing=True,
+        )
+        session_user, expires_at = repo.get_session_username_and_expiry("abc123")
+        assert session_user == "tomas"
+        assert expires_at is not None
+
+        repo.upsert_failed_login("tomas@example.com", 2, created_at, None)
+        assert repo.get_failed_count("tomas@example.com") == 2
+        repo.clear_failed_attempts("tomas@example.com")
+        assert repo.get_failed_count("tomas@example.com") == 0
     finally:
         repo.engine.dispose()

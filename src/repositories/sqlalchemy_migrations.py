@@ -8,7 +8,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     text = None
 
-LATEST_SCHEMA_VERSION = 2
+LATEST_SCHEMA_VERSION = 3
 
 
 def _utcnow_iso() -> str:
@@ -136,6 +136,67 @@ def _migration_2_add_performance_indexes(engine: Any) -> None:
         )
 
 
+def _migration_3_add_auth_tables(engine: Any) -> None:
+    assert text is not None
+    statements = [
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            username VARCHAR(120) PRIMARY KEY,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            first_name VARCHAR(120) NOT NULL,
+            last_name VARCHAR(120) NOT NULL,
+            role VARCHAR(20) NOT NULL DEFAULT 'ANALYST',
+            password VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_users_email ON users (email)",
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id VARCHAR(80) PRIMARY KEY,
+            username VARCHAR(120),
+            login_time TIMESTAMP,
+            expires_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions (username)",
+        "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at)",
+        """
+        CREATE TABLE IF NOT EXISTS failed_logins (
+            identifier VARCHAR(255) PRIMARY KEY,
+            failed_count INTEGER NOT NULL,
+            last_failed_at TIMESTAMP NOT NULL,
+            locked_until TIMESTAMP NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS auth_audit (
+            id INTEGER PRIMARY KEY,
+            event_type VARCHAR(60) NOT NULL,
+            identifier VARCHAR(255),
+            success BOOLEAN NOT NULL,
+            message VARCHAR(400),
+            created_at TIMESTAMP NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_auth_audit_identifier_created_at ON auth_audit (identifier, created_at)",
+    ]
+
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+        conn.execute(
+            text(
+                "INSERT INTO schema_migrations (version, description, applied_at) VALUES (:version, :description, :applied_at)"
+            ),
+            {
+                "version": 3,
+                "description": "add_auth_tables",
+                "applied_at": _utcnow_iso(),
+            },
+        )
+
+
 def explain_query_plan(engine: Any, query: str) -> list[tuple[object, ...]]:
     """Return a portable query-plan snapshot for diagnostics in development environments."""
     if text is None:
@@ -160,5 +221,9 @@ def ensure_domain_schema(engine: Any, target_version: int = LATEST_SCHEMA_VERSIO
     if current < 2 and target_version >= 2:
         _migration_2_add_performance_indexes(engine)
         current = 2
+
+    if current < 3 and target_version >= 3:
+        _migration_3_add_auth_tables(engine)
+        current = 3
 
     return current

@@ -147,3 +147,26 @@ For Streamlit Community Cloud access bootstrap, set these secrets/environment va
 - `BOOTSTRAP_ADMIN_ROLE=ADMIN`
 
 This creates or updates a login user on startup. It is useful because local SQLite storage in cloud-style environments may reset across redeploys.
+
+For persistent users in Streamlit Cloud, also enable SQLAlchemy repositories and point the app to PostgreSQL:
+
+- `USE_SQLALCHEMY_REPOSITORIES=true`
+- `DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME`
+
+Recommended minimum production-style secrets for Streamlit Cloud:
+
+- `ENVIRONMENT=production`
+- `USERS_DB_PATH=storage/users.db`
+- `APP_LOG_DIR=storage/logs`
+- `STREAMLIT_APP_URL=https://your-streamlit-app-url.streamlit.app`
+- `SESSION_TTL_MINUTES=60`
+- `MAX_FAILED_LOGIN_ATTEMPTS=5`
+- `LOCKOUT_MINUTES=15`
+- `USE_SQLALCHEMY_REPOSITORIES=true`
+- `DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME`
+- `BOOTSTRAP_ADMIN_EMAIL=your-email@example.com`
+- `BOOTSTRAP_ADMIN_PASSWORD=YourStrongPassword123!`
+- `BOOTSTRAP_ADMIN_USERNAME=yourpreferredusername`
+- `BOOTSTRAP_ADMIN_FIRST_NAME=Tomas`
+- `BOOTSTRAP_ADMIN_LAST_NAME=Posada`
+- `BOOTSTRAP_ADMIN_ROLE=ADMIN`
